@@ -1,0 +1,486 @@
+void wavingStripe() {
+  CRGB color = CRGB(255, 0, 0); // Explicitly define red
+  int stripWidth = 50; // Width of the stripe
+
+  for (int x = 0; x < 600; x += 10) {
+    // Gradually fade the entire strip
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i].fadeToBlackBy(20); // Adjust fade intensity
+    }
+
+    // Draw the moving stripe
+    for (int i = 0; i < NUM_LEDS; i++) {
+      if (ledCoords[i].x > x - stripWidth / 2 && ledCoords[i].x < x + stripWidth / 2) {
+        leds[i] = color;
+      }
+    }
+
+    FastLED.show();
+    delay(50); // Adjust delay for speed
+  }
+}
+
+
+void downToUp(){
+  // Turn off all LEDs before starting the animation
+  fill_solid(leds, NUM_LEDS, CRGB::Blue);
+  FastLED.show();
+
+  // get random color
+  CRGB color = CRGB::Red;
+
+  // Light up one LED at a time with a 1-second delay
+  for (int x = 50; x < 600; x += 20) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      if (ledCoords[i].x > x - 50 && ledCoords[i].x < x + 50) {
+        leds[i] = color;
+      }
+    }
+    FastLED.show();
+    delay(100);
+    fill_solid(leds, NUM_LEDS, CRGB::Blue);
+    FastLED.show();
+  }
+}
+
+void pulsatingGlow() {
+  CRGB color = CRGB::Red;
+  int maxRadius = 260; // Maximum radius of the glow
+  int centerX = 360;   // Center of the pulsating effect
+  
+  for (int radius = 0; radius < maxRadius; radius++) {
+    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Reset to blue background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = abs(ledCoords[i].x - centerX); // Calculate distance from the center
+      if (distance < radius) {
+        leds[i] = color;
+      }
+    }
+    FastLED.show();
+    delay(10); // Adjust delay for effect speed
+  }
+
+  for (int radius = maxRadius; radius > 0; radius--) {
+    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Reset to blue background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = abs(ledCoords[i].x - centerX); // Calculate distance from the center
+      if (distance < radius) {
+        leds[i] = color;
+      }
+    }
+    FastLED.show();
+    delay(10);
+  }
+}
+
+void colorWaves() {
+  uint8_t hue = 0; // Starting hue
+
+  for (int x = 0; x < 600; x += 10) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black); // Reset to blue background
+
+    for (int i = 0; i < NUM_LEDS; i++) {
+      if (ledCoords[i].x > x - 50 && ledCoords[i].x < x + 50) {
+        leds[i] = CHSV(hue, 255, 255); // Apply gradient color
+      }
+    }
+    
+    hue += 5; // Shift the hue for a rainbow effect
+    FastLED.show();
+    delay(100);
+  }
+}
+
+void rippleEffect() {
+  CRGB color = CRGB::Red;
+  Coord center = {360, 250}; // Central point of the ripple
+  int maxRadius = 300;       // Maximum ripple radius
+
+  for (int radius = 0; radius < maxRadius; radius += 10) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black); // Reset to blue background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = sqrt(sq(ledCoords[i].x - center.x) + sq(ledCoords[i].y - center.y));
+      if (distance < radius && distance > radius - 10) { // Ripple "ring"
+        leds[i] = color;
+      }
+    }
+    FastLED.show();
+    delay(100);
+  }
+}
+
+void spiralEffect() {
+  Coord center = {360, 250}; // Center of the spiral
+  float angleIncrement = 0.1;
+  float radiusIncrement = 1;
+  float time = 0;
+
+  for (int frame = 0; frame < 300; frame++) {
+    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Reset background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int dx = ledCoords[i].x - center.x;
+      int dy = ledCoords[i].y - center.y;
+      float distance = sqrt(sq(dx) + sq(dy));
+      float angle = atan2(dy, dx) + time;
+
+      // Spiral condition
+      if (fmod(distance, 50) < 30 && fmod(angle + distance / radiusIncrement, 2 * PI) < angleIncrement) {
+        leds[i] = CRGB::Red;
+      }
+    }
+    FastLED.show();
+    delay(50);
+    time += 0.1; // Spiral rotation speed
+  }
+}
+
+void radialPulse() {
+  Coord center = {360, 250}; // Center point for the pulse
+  int maxRadius = 250;
+
+  for (int radius = 0; radius < maxRadius; radius += 5) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black); // Reset background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = sqrt(sq(ledCoords[i].x - center.x) + sq(ledCoords[i].y - center.y));
+      if (distance < radius) {
+        leds[i] = CHSV(map(distance, 0, maxRadius, 0, 255), 255, 255); // Gradient color
+      }
+    }
+    FastLED.show();
+    delay(50);
+  }
+
+  for (int radius = maxRadius; radius > 0; radius -= 5) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black); // Reset background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = sqrt(sq(ledCoords[i].x - center.x) + sq(ledCoords[i].y - center.y));
+      if (distance < radius) {
+        leds[i] = CHSV(map(distance, 0, maxRadius, 0, 255), 255, 255);
+      }
+    }
+    FastLED.show();
+    delay(50);
+  }
+
+  delay(500); // Pause before next pulse
+}
+
+void dynamicCircularGradient() {
+  int maxRadius = 300;
+  int centerX = 360; // Initial X position of the center
+  int centerY = 250; // Initial Y position of the center
+  int dx = 2;        // Change in X position for movement
+  int dy = 1;        // Change in Y position for movement
+  uint8_t hueOffset = 0; // Hue shift over time
+
+  while (true) { // Infinite loop for animation
+    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Reset background
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int distance = sqrt(sq(ledCoords[i].x - centerX) + sq(ledCoords[i].y - centerY));
+      if (distance < maxRadius) {
+        leds[i] = CHSV((map(distance, 0, maxRadius, 0, 255) + hueOffset) % 255, 255, 255);
+      }
+    }
+    FastLED.show();
+    delay(50);
+
+    // Move the center point
+    centerX += dx;
+    centerY += dy;
+
+    // Bounce the center within the bounds
+    if (centerX < 0 || centerX > 720) dx = -dx; // Assuming max X is 720
+    if (centerY < 0 || centerY > 500) dy = -dy; // Assuming max Y is 500
+
+    // Shift hue over time
+    hueOffset += 5;
+  }
+}
+
+void coordinateTwinkling() {
+  fill_solid(leds, NUM_LEDS, CRGB::Blue); // Reset background
+
+  for (int t = 0; t < 100; t++) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int twinkleChance = (ledCoords[i].x + ledCoords[i].y + t) % 100;
+      if (twinkleChance < 10) { // Adjust probability for twinkle effect
+        leds[i] = CRGB::White;
+      } else {
+        leds[i].fadeToBlackBy(20); // Gradual fade
+      }
+    }
+    FastLED.show();
+    delay(100);
+  }
+}
+
+
+void leftToRight(){
+  // Turn off all LEDs before starting the animation
+  fill_solid(leds, NUM_LEDS, CRGB::White);
+  FastLED.show();
+
+  // get random color
+  CRGB color = CRGB::Red;
+
+  int numberOfTimes = 5;
+
+  while(numberOfTimes > 0){
+    // Light up one LED at a time with a 1-second delay
+    for (int y = 75; y < 575; y += 20) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        if (ledCoords[i].y > y - 50 && ledCoords[i].y < y + 50) {
+          leds[i] = color;
+        }else{
+          leds[i] = CRGB::White;
+        }
+      }
+      FastLED.show();
+      delay(100);
+      //fill_solid(leds, NUM_LEDS, CRGB::White);
+      FastLED.show();
+    }
+    numberOfTimes--;
+  }
+}
+
+
+void downToUp(){
+  // Turn off all LEDs before starting the animation
+  fill_solid(leds, NUM_LEDS, CRGB::White);
+  FastLED.show();
+
+  // get random color
+  CRGB color = CRGB::Red;
+
+  int numberOfTimes = 5;
+
+  while(numberOfTimes > 0){
+    // Light up one LED at a time with a 1-second delay
+    for (int x = 50; x < 600; x += 20) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        if (ledCoords[i].x > x - 50 && ledCoords[i].x < x + 50) {
+          leds[i] = color;
+        }else{
+          leds[i] = CRGB::White;
+        }
+      }
+      FastLED.show();
+      delay(100);
+      //fill_solid(leds, NUM_LEDS, CRGB::White);
+      FastLED.show();
+    }
+    numberOfTimes--;
+  }
+}
+
+void candyCaneEffect() {
+  uint8_t stripeWidth = 150; // Adjust for stripe thickness
+  uint8_t speed = 6;        // Speed of stripe movement
+  uint16_t offset = 0;       // Offset for animation
+
+  int numberOfTimes = 200;
+
+  while (numberOfTimes > 0) { // Infinite loop for continuous effect
+    // Clear LEDs
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+    for (int i = 0; i < NUM_LEDS; i++) {
+      // Calculate diagonal stripe position using coordinates and offset
+      int diagonalPosition = (ledCoords[i].x + ledCoords[i].y + offset);
+
+      // Use modulus to create thick stripes
+      if ((diagonalPosition / stripeWidth) % 2 == 0) {
+        leds[i] = CRGB::Red; // Red stripe
+      } else {
+        leds[i] = CRGB::White; // White stripe
+      }
+    }
+
+    // Display the current frame
+    FastLED.show();
+
+    // Move the stripes upward by adjusting the offset
+    offset += speed;
+
+    // Pause for smooth animation
+    delay(50);
+
+    numberOfTimes--;
+  }
+}
+
+void rippleEffect() {
+  CRGB color = CRGB::Red;
+  int maxRadius = 300; // Maximum ripple radius
+
+  int numberOfTimes = 5;
+
+  while (numberOfTimes > 0)
+  {
+    // Turn off all LEDs before starting the animation
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    FastLED.show();
+
+    numberOfTimes--;
+
+    // Generate a random center for the ripple
+    Coord center = {
+      random(0, 600), // Replace 600 with the maximum X-coordinate of your setup
+      random(0, 400)  // Replace 400 with the maximum Y-coordinate of your setup
+    };
+
+    for (int radius = 0; radius < maxRadius; radius += 10) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        int distance = sqrt(sq(ledCoords[i].x - center.x) + sq(ledCoords[i].y - center.y));
+        if (distance < radius + 10 && distance > radius - 10) { // Ripple "ring"
+          leds[i] = color;
+        } else {
+          leds[i] = CRGB::Blue;
+        }
+      }
+      FastLED.show();
+      delay(50);
+    }
+  }
+}
+
+void waveRippleEffect() {
+  int numberOfTimes = 50;
+
+  while (numberOfTimes > 0) { // Continuous loop
+
+    CRGB color = CRGB::Red;
+    int maxRadius = 400; // Maximum ripple radius
+    int waveCount = 5;   // Number of ripples (waves) in the effect
+    int delayBetweenWaves = 1000; // Delay between adding new ripples (in ms)
+
+    struct Wave {
+      Coord center;  // Center of the ripple
+      int radius;    // Current radius of the ripple
+    };
+
+    Wave waves[waveCount];       // Array to store wave data
+    int activeWaves = 0;         // Current number of active waves
+    unsigned long lastWaveTime = millis(); // Timer for adding new waves
+
+    numberOfTimes--;
+    
+    // Add a new wave if the timer allows and we have space
+    if (activeWaves < waveCount && millis() - lastWaveTime > delayBetweenWaves) {
+      // Create a new wave with a random center and radius 0
+      waves[activeWaves] = {
+        {random(0, 600), random(0, 400)}, // Random center
+        0                                 // Initial radius
+      };
+      activeWaves++;
+      lastWaveTime = millis();
+    }
+
+    // Clear the LEDs
+    fill_solid(leds, NUM_LEDS, CRGB::White);
+
+    // Update all active waves
+    for (int w = 0; w < activeWaves; w++) {
+      // Expand the radius of the wave
+      waves[w].radius += 10;
+
+      // Draw the wave
+      for (int i = 0; i < NUM_LEDS; i++) {
+        int distance = sqrt(sq(ledCoords[i].x - waves[w].center.x) + sq(ledCoords[i].y - waves[w].center.y));
+        if (distance < waves[w].radius + 10 && distance > waves[w].radius - 10) { // Ripple "ring"
+          leds[i] = color;
+        }else{
+          leds[i] = CRGB::White;
+        }
+      }
+
+      // Deactivate wave if it exceeds maxRadius
+      if (waves[w].radius > maxRadius) {
+        // Shift remaining waves down to replace the completed one
+        for (int j = w; j < activeWaves - 1; j++) {
+          waves[j] = waves[j + 1];
+        }
+        activeWaves--; // Reduce active wave count
+        w--; // Adjust loop index
+      }
+    }
+
+    // Show updated LEDs
+    FastLED.show();
+    delay(50); // Small delay for smooth animation
+  }
+}
+
+
+void leftToRightMod(){
+  uint8_t stripeWidth = 150; // Adjust for stripe thickness
+  uint8_t speed = 6;        // Speed of stripe movement
+  uint16_t offset = 0;       // Offset for animation
+
+  int numberOfTimes = 200;
+
+  while (numberOfTimes > 0) { // Infinite loop for continuous effect
+    // Clear LEDs
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+    for (int i = 0; i < NUM_LEDS; i++) {
+      // Calculate diagonal stripe position using coordinates and offset
+      int diagonalPosition = (ledCoords[i].y + offset);
+
+      // Use modulus to create thick stripes
+      if ((diagonalPosition / stripeWidth) % 2 == 0) {
+        leds[i] = CRGB::Red; // Red stripe
+      } else {
+        leds[i] = CRGB::White; // White stripe
+      }
+    }
+
+    // Display the current frame
+    FastLED.show();
+
+    // Move the stripes upward by adjusting the offset
+    offset += speed;
+
+    // Pause for smooth animation
+    delay(50);
+
+    numberOfTimes--;
+  }
+}
+
+void upToDownMod(){
+  uint8_t stripeWidth = 150; // Adjust for stripe thickness
+  uint8_t speed = 6;        // Speed of stripe movement
+  uint16_t offset = 0;       // Offset for animation
+
+  int numberOfTimes = 200;
+
+  while (numberOfTimes > 0) { // Infinite loop for continuous effect
+    // Clear LEDs
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+    for (int i = 0; i < NUM_LEDS; i++) {
+      // Calculate diagonal stripe position using coordinates and offset
+      int diagonalPosition = (ledCoords[i].x + offset);
+
+      // Use modulus to create thick stripes
+      if ((diagonalPosition / stripeWidth) % 2 == 0) {
+        leds[i] = CRGB::Red; // Red stripe
+      } else {
+        leds[i] = CRGB::White; // White stripe
+      }
+    }
+
+    // Display the current frame
+    FastLED.show();
+
+    // Move the stripes upward by adjusting the offset
+    offset += speed;
+
+    // Pause for smooth animation
+    delay(50);
+
+    numberOfTimes--;
+  }
+}
