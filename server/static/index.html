@@ -6,9 +6,15 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <h2>Smart Tree Calibration</h2>
-  <input type="file" accept="image/*" capture="environment" id="photo-input">
-  <button id="calibration-btn">Start Calibration</button>
+  <h1>Smart Christmas Tree</h1>
+  <section id="buttons-section">
+    <button id="calibration-btn">Start Calibration</button>
+    <button id="choose-effect-btn">Change Effect</button>
+  </section>
+  <div class="tree-wrapper">
+    <img src="tree.png" alt="Tree" class="tree-base">
+    <div class="tree-mask"></div>
+  </div>
 
   <script src="/static/script.js"></script>
 </body>
