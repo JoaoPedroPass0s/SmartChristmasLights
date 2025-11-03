@@ -2,20 +2,22 @@ from flask import Flask, request, jsonify, send_from_directory
 from calibration.image_processing import analyze_video, detect_leds_in_frame
 import requests, json, os
 
-ESP_URL = "http://192.168.1.8"  # Change to your ESP's IP
+ESP_URL = "http://192.168.1.200"  # ESP's IP
 
 import random
 
-elements = ['R','G','B','Y','P','C']
+elements = ['R','G','B']
 led_count = 150
-k = 12
+k = 5 # sequence length
+n_sequences = 3
 used = set()
 led_color_mappings = []
 
 def draw_unique_led_colors():
     while True:
         # pick with replacement (allows repeated letters)
-        chars = tuple(random.choices(elements, k=k*2))
+        chars = tuple(random.choices(elements, k=k))
+        chars = chars * n_sequences  # repeat for redundancy
         code = ''.join(chars)
         if code not in used:
             used.add(code)

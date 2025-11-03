@@ -9,7 +9,7 @@
 #define LED_TYPE   WS2811  // Type of LED strip
 #define COLOR_ORDER GRB    // Color order (GRB is typical for WS2811)
 #define BRIGHTNESS 25      // LED brightness
-#define NUM_FRAMES 6       // Number of frames in the calibration pattern
+#define NUM_FRAMES 15       // Number of frames in the calibration pattern
 #define FRAME_DELAY 1000    // Delay between frames in milliseconds
 
 struct Coord { int x; int y; };
@@ -20,8 +20,12 @@ CRGB leds[NUM_LEDS];      // Array to store LED color values
 
 Coord ledCoords[NUM_LEDS]; // Array to store LED coordinates
 
-const char* ssid = "NOS-676B";
-const char* password = "L4N9U7JC";
+const char* ssid = "NOS-EC16"; // Your WiFi SSID
+const char* password = "FVK5Q2W6"; // Your WiFi password
+
+IPAddress local_IP(192, 168, 1, 200);   // desired static IP
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 AsyncWebServer server(80);
 
@@ -96,6 +100,7 @@ void loop() {
   if (calibration_mode) {
     server.end();
     WiFi.disconnect();
+    delay(1000);
     playCalibrationSequence();
     calibration_mode = false;
     connectToWiFi();
@@ -122,25 +127,23 @@ CRGB getColorFromChar(char c) {
     case 'R': return CRGB::Red;
     case 'G': return CRGB::Green;
     case 'B': return CRGB::Blue;
-    case 'Y': return CRGB::Yellow;
-    case 'P': return CRGB::Purple;
-    case 'C': return CRGB::Cyan;
-    case 'V': return CRGB::Violet;
-    case 'N': return CRGB::Orange;
-    case 'M': return CRGB::Magenta;
     default:  return CRGB::Black;
   }
 }
 
 void playCalibrationSequence() {
     // Sync flash
+    FastLED.setBrightness(100);
+    delay(500);
     fill_solid(leds, NUM_LEDS, CRGB::White);
     FastLED.show();
     delay(1000);
     FastLED.clear();
-    delay(500);
+    FastLED.show();
+    delay(1000);
 
     // Play pattern frames
+    FastLED.setBrightness(1);
     for (int f = 0; f < NUM_FRAMES; f++) {
         for (int i = 0; i < NUM_LEDS; i++) {
             leds[i] = patternTable[i][f];
@@ -150,6 +153,7 @@ void playCalibrationSequence() {
     }
 
     // End flash
+    FastLED.setBrightness(100);
     fill_solid(leds, NUM_LEDS, CRGB::White);
     FastLED.show();
     delay(1000);
@@ -157,6 +161,7 @@ void playCalibrationSequence() {
 }
 
 void connectToWiFi() {
+  WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
