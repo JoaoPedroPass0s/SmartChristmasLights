@@ -148,15 +148,76 @@ def fill_missing_leds(matched, num_leds):
     matched_dict = {i: pos for (i, pos) in matched}
     for i in range(num_leds):
         if i not in matched_dict:
-            if(i == 0):
-                x_predicted_pos = 0
-                y_predicted_pos = 0
+            # Find nearest known neighbors safely to predict a position.
+            # Prefer averaging previous and next known positions when available.
+            prev_idx = None
+            next_idx = None
+            # search backwards for previous known
+            for j in range(i - 1, -1, -1):
+                if j in matched_dict:
+                    prev_idx = j
+                    break
+            # search forwards for next known
+            for j in range(i + 1, num_leds):
+                if j in matched_dict:
+                    next_idx = j
+                    break
+
+            if prev_idx is not None and next_idx is not None:
+                prev = matched_dict[prev_idx]
+                nxt = matched_dict[next_idx]
+                x_predicted_pos = (prev[0] + nxt[0]) / 2.0
+                y_predicted_pos = (prev[1] + nxt[1]) / 2.0
+            elif prev_idx is not None:
+                prev = matched_dict[prev_idx]
+                x_predicted_pos = prev[0]
+                y_predicted_pos = prev[1]
+            elif next_idx is not None:
+                nxt = matched_dict[next_idx]
+                x_predicted_pos = nxt[0]
+                y_predicted_pos = nxt[1]
             else:
-                x_predicted_pos = ((matched_dict.get(i-1)[0] + matched_dict.get(i+1)[0]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[0])
-                y_predicted_pos = ((matched_dict.get(i-1)[1] + matched_dict.get(i+1)[1]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[1])
-            matched_dict[i] = (x_predicted_pos,y_predicted_pos)
+                # No known LEDs at all — fallback to (0,0)
+                x_predicted_pos = 0.0
+                y_predicted_pos = 0.0
+
+            matched_dict[i] = (float(x_predicted_pos), float(y_predicted_pos))
     return [(i, matched_dict[i]) for i in range(num_leds)]
     
+def correct_outliers(matched, distance_threshold_factor=2.0):
+    """
+    Detect and correct outlier LED positions that are too far from their neighbors.
+    """
+    if len(matched) < 3:
+        return matched  # nothing to correct
+
+    # Compute pairwise distances between consecutive LEDs
+    distances = []
+    for i in range(1, len(matched)):
+        x1, y1 = matched[i-1][1]
+        x2, y2 = matched[i][1]
+        distances.append(np.sqrt((x2 - x1)**2 + (y2 - y1)**2))
+
+    median_dist = np.median(distances)
+    threshold = median_dist * distance_threshold_factor
+
+    corrected = matched.copy()
+    for i in range(1, len(matched) - 1):
+        prev_pos = np.array(matched[i - 1][1])
+        curr_pos = np.array(matched[i][1])
+        next_pos = np.array(matched[i + 1][1])
+
+        dist_prev = np.linalg.norm(curr_pos - prev_pos)
+        dist_next = np.linalg.norm(curr_pos - next_pos)
+
+        # If current point is too far from both sides, consider it an outlier
+        if dist_prev > threshold and dist_next > threshold:
+            print(f"Outlier detected at index {i}: {curr_pos} (prev: {prev_pos}, next: {next_pos})")
+            # Replace with midpoint of neighbors
+            corrected_pos = (prev_pos + next_pos) / 2.0
+            corrected[i] = (matched[i][0], (float(corrected_pos[0]), float(corrected_pos[1])))
+
+    return corrected
 
 
 def draw_leds_on_frame(matched, save_dir="led_debug_frames", base_frame_path="led_debug_frames/frame_first.jpg"):
@@ -224,8 +285,10 @@ def led_calibration(video_path, debug=False):
 
     matched = fill_missing_leds(matched, len(mappings))
 
+    corrected_matched = correct_outliers(matched)
+
     led_positions_path = jsons_dir / 'led_positions.json'
     with open(led_positions_path, 'w') as fh:
-        json.dump(matched, fh)
- 
-    return matched
+        json.dump(corrected_matched, fh)
+
+    return corrected_matched
