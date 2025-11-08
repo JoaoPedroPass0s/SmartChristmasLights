@@ -38,8 +38,8 @@ def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="le
     if debug:
         if(step_id == 0):
             cv2.imwrite(os.path.join(save_dir, f"frame_first.jpg"), frame)
-        cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_detected.jpg"), debug_vis)
-        cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_raw.jpg"), frame)
+        cv2.imwrite(os.path.join(save_dir, f"frame_{step_id:04d}_detected.jpg"), debug_vis)
+        cv2.imwrite(os.path.join(save_dir, f"frame_{step_id:04d}_raw.jpg"), frame)
         #small_frame = cv2.resize(debug_vis, (640, 360))
         #cv2.imshow("Detections", small_frame)
         #cv2.waitKey(500)
