@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import json
 
 def detect_leds_in_frame(frame, frame_id=0, debug=False, save_dir="led_debug_frames"):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -32,12 +33,11 @@ def detect_leds_in_frame(frame, frame_id=0, debug=False, save_dir="led_debug_fra
                 cv2.putText(debug_vis, color, (cx + 5, cy - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_map[color], 1)
 
-    # Always save — even if debug=False
-    cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_detected.jpg"), debug_vis)
-    cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_raw.jpg"), frame)
-
     # Only show live debug window if debug=True
     if debug:
+        # Always save — even if debug=False
+        cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_detected.jpg"), debug_vis)
+        cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_raw.jpg"), frame)
         small_frame = cv2.resize(debug_vis, (640, 360))
         cv2.imshow("Detections", small_frame)
         cv2.waitKey(500)
@@ -66,7 +66,6 @@ def analyze_video(video_path, debug=False):
     start, end = sync_indices[0], sync_indices[-1]
 
     cap = cv2.VideoCapture(video_path)
-    print("Frame rate:", cap.get(cv2.CAP_PROP_FPS))
 
     frame_id = 0
     step_id = 0
@@ -74,7 +73,6 @@ def analyze_video(video_path, debug=False):
 
     cap = cv2.VideoCapture(video_path)
     target_interval_s = 1.0
-    print("Starting analysis from ms:", start)
     cap.set(cv2.CAP_PROP_POS_MSEC, start)
     next_target_ms = 4000.0
 
@@ -128,5 +126,88 @@ def group_detections(results):
     leds_detected = [(pos, colors) for (pos, colors) in leds_detected if len(colors) >= 15]
     return leds_detected
 
+def match_leds(mappings, grouped, debug = False, save_dir="led_debug_frames", base_frame_path=None):
+    matched = []
+    for (i, mapping) in enumerate(mappings):
+        code = mapping[:5]
+        for (pos, colors) in grouped:
+            detected_codes = [''.join(colors[j:j+5]) for j in range(0, len(colors), 5)]
+            # if theres more than one equal 5-length segment
+            num_found = 0
+            for detected_code in detected_codes:
+                if code == detected_code:
+                    num_found += 1
+            if num_found > 1:
+                matched.append((i, pos))
+                break
+    return matched
+
+def fill_missing_leds(matched, num_leds):
+    matched_dict = {i: pos for (i, pos) in matched}
+    for i in range(num_leds):
+        if i not in matched_dict:
+            x_predicted_pos = ((matched_dict.get(i-1)[0] + matched_dict.get(i+1)[0]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[0])
+            y_predicted_pos = ((matched_dict.get(i-1)[1] + matched_dict.get(i+1)[1]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[1])
+            matched_dict[i] = (x_predicted_pos,y_predicted_pos)
+    return [(i, matched_dict[i]) for i in range(num_leds)]
+    
 
 
+def draw_leds_on_frame(matched, save_dir="led_debug_frames", base_frame_path=None):
+    # Try to overlay on a real frame if available; otherwise use a black frame
+    os.makedirs(save_dir, exist_ok=True)
+    frame = None
+    # If caller provided a path to a base frame, try to load it
+    if base_frame_path is not None:
+        frame = cv2.imread(base_frame_path)
+
+    # If no explicit base frame, try to find a saved raw frame from detection
+    if frame is None:
+        try:
+            # look for files named frame_XXXX_raw.jpg in save_dir
+            files = [f for f in os.listdir(save_dir) if f.startswith("frame_") and f.endswith("_raw.jpg")]
+            files.sort()
+            if len(files) > 0:
+                frame = cv2.imread(os.path.join(save_dir, files[0]))
+        except Exception:
+            frame = None
+
+    # Fallback to a black canvas with a reasonable default size
+    if frame is None:
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    # Draw matched leds on the chosen frame
+    for (i, pos) in matched:
+        # Ensure positions are integer tuples
+        p = (int(pos[0]), int(pos[1]))
+        cv2.circle(frame, p, 1, (0, 255, 0), -1)
+        cv2.putText(frame, str(i), (p[0] + 7, p[1] - 7),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+    # Save and show
+    cv2.imwrite(os.path.join(save_dir, "final_matched_frame.jpg"), frame)
+    try:
+        small = cv2.resize(frame, (480, 640))
+        cv2.imshow("Matched LEDs", small)
+        cv2.waitKey(0)
+        cv2.destroyWindow("Matched LEDs")
+    except Exception:
+        # If running headless or on systems without GUI support, ignore
+        pass
+
+def led_calibration(video_path, debug=False):
+    results = analyze_video(video_path, debug)
+
+    grouped = group_detections(results)
+
+    with open("../jsons/mappings.json", 'r') as fh:
+        mappings = json.load(fh)
+    
+    matched = match_leds(mappings,grouped)
+
+    matched = fill_missing_leds(matched, len(mappings))
+
+    with open("../jsons/led_positions.json", 'w') as fh:
+        json.dump(matched, fh)
+ 
+    return matched

@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, send_from_directory
 from calibration.image_processing import analyze_video, detect_leds_in_frame
 import requests, json, os
 
+from server.calibration import image_processing
+
 ESP_URL = "http://192.168.1.200"  # ESP's IP
 
 import random
@@ -26,13 +28,30 @@ def draw_unique_led_colors():
 
 def generate_led_color_mappings():
     mappings = []
-    for _ in range(150):
+    for _ in range(led_count):
         # Add Random Color
         mappings.append(draw_unique_led_colors())
-    return mappings
 
+    # persist mappings to disk so they can be inspected or reused
+    try:
+        with open(mapping_file, 'w') as fh:
+            json.dump(mappings, fh)
+        # app may not be defined at import-time when this function is defined,
+        # but it's called after `app` is created below, so logger is available.
+        try:
+            app.logger.info('Saved %d LED mappings to %s', len(mappings), mapping_file)
+        except Exception:
+            pass
+    except Exception as e:
+        try:
+            app.logger.error('Failed to save mappings to %s: %s', mapping_file, e)
+        except Exception:
+            pass
+
+    return mappings
+    
 app = Flask(__name__, static_folder="static")
-mapping_file = "mapping.json"
+mapping_file = "jsons/mappings.json"
 led_color_mappings = generate_led_color_mappings()
 
 @app.route("/")
@@ -48,6 +67,8 @@ def upload_video():
     video = request.files["video"]
     path = f"tmp_video.mp4"
     video.save(path)
+    matched = image_processing.led_calibration(path)
+    send_new_led_mapping(matched)
     return send_from_directory("static", "index.html")
 
 @app.route("/send_led_mapping", methods=["GET"])
@@ -66,6 +87,23 @@ def send_led_mapping():
     app.logger.info("Sending ledAssignment length=%d to %s", len(assignment), url)
     try:
         resp = requests.get(url, params={"ledAssignment": assignment}, timeout=5)
+        app.logger.info("ESP responded: %s %s", resp.status_code, resp.text[:200])
+        return jsonify({"status": "ok", "esp_status": resp.status_code, "esp_text": resp.text}), 200
+    except requests.RequestException as e:
+        app.logger.error("Failed to send to ESP %s: %s", url, str(e))
+        return jsonify({"status": "error", "error": str(e)}), 502
+    
+@app.route("/send_new_led_mapping", methods=["POST"])
+def send_new_led_mapping(matched=None):
+    if matched is None:
+        return jsonify({"status": "error", "message": "No matched LEDs provided"}), 400
+
+    # Send the new LED mapping to the ESP
+    url = f"{ESP_URL}/calibrated_leds"
+    assignment = ''.join(matched)
+    app.logger.info("Sending ledAssignment length=%d to %s", len(assignment), url)
+    try:
+        resp = requests.get(url, params={"ledsPositions": assignment}, timeout=5)
         app.logger.info("ESP responded: %s %s", resp.status_code, resp.text[:200])
         return jsonify({"status": "ok", "esp_status": resp.status_code, "esp_text": resp.text}), 200
     except requests.RequestException as e:

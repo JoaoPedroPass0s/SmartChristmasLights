@@ -18,7 +18,9 @@ async function startCamera() {
     await video.play();
 
     // Enable the record button after camera starts
-    document.getElementById("record-btn").disabled = false;
+        // Enable the record button after camera starts (guard element existence)
+        const recordBtnEl = document.getElementById("record-btn");
+        if (recordBtnEl) recordBtnEl.disabled = false;
 
     mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
     mediaRecorder.ondataavailable = e => chunks.push(e.data);
@@ -46,27 +48,45 @@ async function startCamera() {
     }
 }
 
-document.getElementById("enable-camera-btn").onclick = () => {
-    startCamera();
-    // Disable the enable button after click
-    document.getElementById("enable-camera-btn").disabled = true;
-};
+// Optional "enable camera" button: guard in case the markup doesn't include it
+const enableBtnEl = document.getElementById("enable-camera-btn");
+if (enableBtnEl) {
+    enableBtnEl.onclick = () => {
+        startCamera();
+        // Disable the enable button after click
+        enableBtnEl.disabled = true;
+    };
+}
 
-document.getElementById("record-btn").onclick = async () => {
-    try {
-    await fetch('/send_led_mapping');
-    } catch (err) {
-    console.warn('send_led_mapping failed', err);
-    }
+// Record button: ensure media is available before starting
+const recordBtn = document.getElementById("record-btn");
+if (recordBtn) {
+    recordBtn.onclick = async () => {
+        if (!mediaRecorder) {
+            await startCamera();
+        }
+        try {
+            await fetch('/send_led_mapping');
+        } catch (err) {
+            console.warn('send_led_mapping failed', err);
+        }
 
-    chunks = [];
-    mediaRecorder.start();
-    document.getElementById("record-btn").disabled = true;
-    document.getElementById("stop-btn").disabled = false;
-};
+        chunks = [];
+        if (mediaRecorder) mediaRecorder.start();
+        recordBtn.disabled = true;
+        const stopBtnEl = document.getElementById("stop-btn");
+        if (stopBtnEl) stopBtnEl.disabled = false;
+    };
+}
 
-document.getElementById("stop-btn").onclick = () => {
-    mediaRecorder.stop();
-    document.getElementById("record-btn").disabled = false;
-    document.getElementById("stop-btn").disabled = true;
-};
+// Stop button: guard existence and recorder state
+const stopBtn = document.getElementById("stop-btn");
+if (stopBtn) {
+    stopBtn.onclick = () => {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        if (recordBtn) recordBtn.disabled = false;
+        stopBtn.disabled = true;
+    };
+}

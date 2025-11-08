@@ -1,8 +1,4 @@
-let currentLed = 0;
 
-async function send_led_mapping() {
-  await fetch(`/send_led_mapping`);
-}
 
 // guard calibration button in case this script is loaded on pages without it
 const calibBtn = document.getElementById("calibration-btn");
