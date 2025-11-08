@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 from calibration.image_processing import analyze_video, detect_leds_in_frame
-import requests, json, os
+import requests, json, os, time
 from calibration import image_processing
 
 ESP_URL = "http://192.168.1.200"  # ESP's IP
@@ -10,7 +10,7 @@ import random
 elements = ['R','G','B']
 led_count = 150
 k = 5 # sequence length
-n_sequences = 3
+n_sequences = 5
 used = set()
 led_color_mappings = []
 
@@ -102,13 +102,20 @@ def send_new_led_mapping(matched=None):
     url = f"{ESP_URL}/calibrated_leds"
     assignment = ';'.join([f"{i}:{int(x)},{int(y)}" for (i, (x, y)) in matched])
     app.logger.info("Sending ledAssignment length=%d to %s", len(assignment), url)
-    try:
-        resp = requests.get(url, params={"ledsPositions": assignment}, timeout=10)
-        app.logger.info("ESP responded: %s %s", resp.status_code, resp.text[:200])
-        return jsonify({"status": "ok", "esp_status": resp.status_code, "esp_text": resp.text}), 200
-    except requests.RequestException as e:
-        app.logger.error("Failed to send to ESP %s: %s", url, str(e))
-        return jsonify({"status": "error", "error": str(e)}), 502
+    # retry a few times because the ESP may be briefly unavailable after calibration
+    retries = 6
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.get(url, params={"ledsPositions": assignment}, timeout=8)
+            app.logger.info("ESP responded: %s %s (attempt %d/%d)", resp.status_code, resp.text[:200], attempt, retries)
+            return jsonify({"status": "ok", "esp_status": resp.status_code, "esp_text": resp.text}), 200
+        except requests.RequestException as e:
+            app.logger.warning("Attempt %d/%d: Failed to send to ESP %s: %s", attempt, retries, url, str(e))
+            if attempt < retries:
+                time.sleep(1.0)
+            else:
+                app.logger.error("All attempts failed to reach ESP %s", url)
+                return jsonify({"status": "error", "error": str(e)}), 502
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

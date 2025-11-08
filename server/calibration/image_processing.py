@@ -74,9 +74,9 @@ def analyze_video(video_path, debug=False):
     results = []
 
     cap = cv2.VideoCapture(video_path)
-    target_interval_s = 1.0
+    target_interval_s = 0.2
     cap.set(cv2.CAP_PROP_POS_MSEC, start)
-    next_target_ms = 4000.0
+    next_target_ms = 3600.0
 
     while True:
         ret, frame = cap.read()
@@ -97,7 +97,7 @@ def analyze_video(video_path, debug=False):
             # handle frame
             next_target_ms += target_interval_s * 1000.0
 
-        if step_id >= 15:
+        if step_id >= 25:
             break
 
         frame_id += 1
@@ -139,7 +139,7 @@ def match_leds(mappings, grouped, debug = False, save_dir="led_debug_frames", ba
             for detected_code in detected_codes:
                 if code == detected_code:
                     num_found += 1
-            if num_found > 1:
+            if num_found > 2:
                 matched.append((i, pos))
                 break
     return matched
@@ -148,8 +148,12 @@ def fill_missing_leds(matched, num_leds):
     matched_dict = {i: pos for (i, pos) in matched}
     for i in range(num_leds):
         if i not in matched_dict:
-            x_predicted_pos = ((matched_dict.get(i-1)[0] + matched_dict.get(i+1)[0]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[0])
-            y_predicted_pos = ((matched_dict.get(i-1)[1] + matched_dict.get(i+1)[1]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[1])
+            if(i == 0):
+                x_predicted_pos = 0
+                y_predicted_pos = 0
+            else:
+                x_predicted_pos = ((matched_dict.get(i-1)[0] + matched_dict.get(i+1)[0]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[0])
+                y_predicted_pos = ((matched_dict.get(i-1)[1] + matched_dict.get(i+1)[1]) / 2) if (i+1 in matched_dict) else (matched_dict.get(i-1)[1])
             matched_dict[i] = (x_predicted_pos,y_predicted_pos)
     return [(i, matched_dict[i]) for i in range(num_leds)]
     

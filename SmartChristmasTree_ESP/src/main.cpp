@@ -9,8 +9,8 @@
 #define LED_TYPE   WS2811  // Type of LED strip
 #define COLOR_ORDER RGB    // Color order
 #define BRIGHTNESS 25      // LED brightness
-#define NUM_FRAMES 15       // Number of frames in the calibration pattern
-#define FRAME_DELAY 1000    // Delay between frames in milliseconds
+#define NUM_FRAMES 25       // Number of frames in the calibration pattern
+#define FRAME_DELAY 200    // Delay between frames in milliseconds
 
 struct Coord { int x; int y; };
 
@@ -33,7 +33,7 @@ bool calibration_mode = false;
 
 CRGB getColorFromChar(char c);
 void playCalibrationSequence();
-void connectToWiFi();
+bool connectToWiFi(unsigned long timeoutMs = 15000);
 void UpAndDownEffect();
 
 void setup() {
@@ -121,13 +121,18 @@ void setup() {
 
 void loop() {
   if (calibration_mode) {
-    server.end();
-    WiFi.disconnect();
+    // Keep the webserver and WiFi active during calibration so the PC can
+    // continue communicating. Do not call server.end() or WiFi.disconnect().
     delay(1000);
     playCalibrationSequence();
     calibration_mode = false;
-    connectToWiFi();
-    server.begin();
+    // If WiFi was lost for any reason, try to reconnect with a timeout.
+    if (WiFi.status() != WL_CONNECTED) {
+      bool ok = connectToWiFi(10000);
+      if (!ok) {
+        Serial.println("Warning: WiFi reconnect failed after calibration");
+      }
+    }
   }
   else {
     if(ledCoords[0].x == 0 && ledCoords[0].y == 0)
@@ -206,48 +211,55 @@ void UpAndDownEffect() {
   }
 
   FastLED.show();
-  // Small delay for visible motion; tune as needed
-  delay(30);
+  // Small delay for visible motion; use FastLED.delay to yield for WiFi
+  FastLED.delay(30);
 }
 
 void playCalibrationSequence() {
     // Sync flash
     FastLED.setBrightness(100);
-    delay(500);
+  FastLED.delay(500);
     fill_solid(leds, NUM_LEDS, CRGB::White);
     FastLED.show();
-    delay(1000);
+  FastLED.delay(1000);
     FastLED.clear();
     FastLED.show();
-    delay(1000);
+  FastLED.delay(1000);
 
     // Play pattern frames
-    FastLED.setBrightness(1);
+  FastLED.setBrightness(1);
     for (int f = 0; f < NUM_FRAMES; f++) {
         for (int i = 0; i < NUM_LEDS; i++) {
             leds[i] = patternTable[i][f];
         }
         FastLED.show();
-        delay(FRAME_DELAY);
+    FastLED.delay(FRAME_DELAY);
     }
 
     // End flash
     FastLED.setBrightness(100);
     fill_solid(leds, NUM_LEDS, CRGB::White);
     FastLED.show();
-    delay(1000);
+  FastLED.delay(1000);
     FastLED.clear();
 }
 
-void connectToWiFi() {
+bool connectToWiFi(unsigned long timeoutMs) {
   WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
     delay(500);
     Serial.print(".");
   }
   Serial.println();
-  Serial.print("Connected! IP address: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected! IP address: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  } else {
+    Serial.println("WiFi connect timed out");
+    return false;
+  }
 }
