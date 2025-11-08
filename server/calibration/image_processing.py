@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import os
 import json
+from pathlib import Path
 
-def detect_leds_in_frame(frame, frame_id=0, debug=False, save_dir="led_debug_frames"):
+def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="led_debug_frames"):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     masks = {
         'R': cv2.inRange(hsv, np.array([144, 193, 80]), np.array([179, 255, 255])), 
@@ -35,12 +36,13 @@ def detect_leds_in_frame(frame, frame_id=0, debug=False, save_dir="led_debug_fra
 
     # Only show live debug window if debug=True
     if debug:
-        # Always save — even if debug=False
+        if(step_id == 0):
+            cv2.imwrite(os.path.join(save_dir, f"frame_first.jpg"), frame)
         cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_detected.jpg"), debug_vis)
         cv2.imwrite(os.path.join(save_dir, f"frame_{frame_id:04d}_raw.jpg"), frame)
-        small_frame = cv2.resize(debug_vis, (640, 360))
-        cv2.imshow("Detections", small_frame)
-        cv2.waitKey(500)
+        #small_frame = cv2.resize(debug_vis, (640, 360))
+        #cv2.imshow("Detections", small_frame)
+        #cv2.waitKey(500)
 
     return detections
 
@@ -89,7 +91,7 @@ def analyze_video(video_path, debug=False):
         current_ms = cap.get(cv2.CAP_PROP_POS_MSEC)  # timestamp of this frame
         # process frames when their timestamp crosses the next target time
         if current_ms >= next_target_ms:
-            detections = detect_leds_in_frame(frame,frame_id,debug)
+            detections = detect_leds_in_frame(frame,step_id,frame_id,debug)
             results.append((step_id, detections))
             step_id += 1
             # handle frame
@@ -153,7 +155,7 @@ def fill_missing_leds(matched, num_leds):
     
 
 
-def draw_leds_on_frame(matched, save_dir="led_debug_frames", base_frame_path=None):
+def draw_leds_on_frame(matched, save_dir="led_debug_frames", base_frame_path="led_debug_frames/frame_first.jpg"):
     # Try to overlay on a real frame if available; otherwise use a black frame
     os.makedirs(save_dir, exist_ok=True)
     frame = None
@@ -199,15 +201,27 @@ def led_calibration(video_path, debug=False):
     results = analyze_video(video_path, debug)
 
     grouped = group_detections(results)
+    # Resolve paths relative to the server/ folder (two levels up from this file: server/calibration -> server)
+    base_dir = Path(__file__).resolve().parent.parent
+    jsons_dir = base_dir / 'jsons'
+    mappings_path = jsons_dir / 'mappings.json'
+    mappings_path_parent = mappings_path.parent
+    if not mappings_path_parent.exists():
+        # create folder if it doesn't exist to avoid write errors later
+        mappings_path_parent.mkdir(parents=True, exist_ok=True)
 
-    with open("../jsons/mappings.json", 'r') as fh:
+    if not mappings_path.exists():
+        raise FileNotFoundError(f"mappings.json not found at expected location: {mappings_path}")
+
+    with open(mappings_path, 'r') as fh:
         mappings = json.load(fh)
     
     matched = match_leds(mappings,grouped)
 
     matched = fill_missing_leds(matched, len(mappings))
 
-    with open("../jsons/led_positions.json", 'w') as fh:
+    led_positions_path = jsons_dir / 'led_positions.json'
+    with open(led_positions_path, 'w') as fh:
         json.dump(matched, fh)
  
     return matched

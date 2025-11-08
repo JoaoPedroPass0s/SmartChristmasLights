@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from calibration.image_processing import analyze_video, detect_leds_in_frame
 import requests, json, os
-
-from server.calibration import image_processing
+from calibration import image_processing
 
 ESP_URL = "http://192.168.1.200"  # ESP's IP
 
@@ -14,6 +13,8 @@ k = 5 # sequence length
 n_sequences = 3
 used = set()
 led_color_mappings = []
+
+mapping_file = "jsons/mappings.json"
 
 def draw_unique_led_colors():
     while True:
@@ -51,7 +52,6 @@ def generate_led_color_mappings():
     return mappings
     
 app = Flask(__name__, static_folder="static")
-mapping_file = "jsons/mappings.json"
 led_color_mappings = generate_led_color_mappings()
 
 @app.route("/")
@@ -100,10 +100,10 @@ def send_new_led_mapping(matched=None):
 
     # Send the new LED mapping to the ESP
     url = f"{ESP_URL}/calibrated_leds"
-    assignment = ''.join(matched)
+    assignment = ';'.join([f"{i}:{int(x)},{int(y)}" for (i, (x, y)) in matched])
     app.logger.info("Sending ledAssignment length=%d to %s", len(assignment), url)
     try:
-        resp = requests.get(url, params={"ledsPositions": assignment}, timeout=5)
+        resp = requests.get(url, params={"ledsPositions": assignment}, timeout=10)
         app.logger.info("ESP responded: %s %s", resp.status_code, resp.text[:200])
         return jsonify({"status": "ok", "esp_status": resp.status_code, "esp_text": resp.text}), 200
     except requests.RequestException as e:
