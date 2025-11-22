@@ -8,7 +8,7 @@ ESP_URL = "http://192.168.1.200"  # ESP's IP
 import random
 
 elements = ['R','G','B']
-led_count = 150
+led_count = 200
 k = 5 # sequence length
 n_sequences = 5
 used = set()
@@ -20,7 +20,6 @@ def draw_unique_led_colors():
     while True:
         # pick with replacement (allows repeated letters)
         chars = tuple(random.choices(elements, k=k))
-        chars = chars * n_sequences  # repeat for redundancy
         code = ''.join(chars)
         if code not in used:
             used.add(code)

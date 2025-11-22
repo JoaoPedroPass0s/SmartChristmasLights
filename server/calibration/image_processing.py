@@ -4,12 +4,18 @@ import os
 import json
 from pathlib import Path
 
-def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="led_debug_frames"):
+default_ranges = {
+    'R': (np.array([144, 180, 57]), np.array([179, 255, 252])),
+    'G': (np.array([37, 79, 83]), np.array([85, 255, 240])),
+    'B': (np.array([97, 115, 111]), np.array([124, 255, 255])),
+}
+
+def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="led_debug_frames", color_ranges=default_ranges):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     masks = {
-        'R': cv2.inRange(hsv, np.array([144, 193, 80]), np.array([179, 255, 255])), 
-        'G': cv2.inRange(hsv, np.array([30, 70, 100]), np.array([90, 255, 255])),
-        'B': cv2.inRange(hsv, np.array([97, 130, 154]), np.array([144, 255, 255])),
+        'R': cv2.inRange(hsv, color_ranges['R'][0], color_ranges['R'][1]), 
+        'G': cv2.inRange(hsv, color_ranges['G'][0], color_ranges['G'][1]),
+        'B': cv2.inRange(hsv, color_ranges['B'][0], color_ranges['B'][1]),
     }
     masks = {color: cv2.GaussianBlur(mask, (7,7), 0) for color, mask in masks.items()}
 
@@ -63,7 +69,7 @@ def find_sync_frames(video_path):
     sync_indices = np.where(brightness > threshold)[0]
     return sync_indices, brightness
 
-def analyze_video(video_path, debug=False):
+def analyze_video(video_path, debug=False, color_ranges=default_ranges):
     sync_indices, brightness = find_sync_frames(video_path)
     start, end = sync_indices[0], sync_indices[-1]
 
@@ -91,7 +97,7 @@ def analyze_video(video_path, debug=False):
         current_ms = cap.get(cv2.CAP_PROP_POS_MSEC)  # timestamp of this frame
         # process frames when their timestamp crosses the next target time
         if current_ms >= next_target_ms:
-            detections = detect_leds_in_frame(frame,step_id,frame_id,debug)
+            detections = detect_leds_in_frame(frame,step_id,frame_id,debug, color_ranges=color_ranges)
             results.append((step_id, detections))
             step_id += 1
             # handle frame
@@ -131,13 +137,12 @@ def group_detections(results):
 def match_leds(mappings, grouped, debug = False, save_dir="led_debug_frames", base_frame_path=None):
     matched = []
     for (i, mapping) in enumerate(mappings):
-        code = mapping[:5]
         for (pos, colors) in grouped:
             detected_codes = [''.join(colors[j:j+5]) for j in range(0, len(colors), 5)]
             # if theres more than one equal 5-length segment
             num_found = 0
             for detected_code in detected_codes:
-                if code == detected_code:
+                if mapping == detected_code:
                     num_found += 1
             if num_found > 2:
                 matched.append((i, pos))

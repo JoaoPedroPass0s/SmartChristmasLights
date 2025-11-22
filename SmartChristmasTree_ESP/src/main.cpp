@@ -5,19 +5,17 @@
 #include <ESPAsyncTCP.h>
 
 #define LED_PIN    D4      // Pin connected to the Data input of the WS2811 strip
-#define NUM_LEDS   150     // Total number of LEDs in your strip
+#define NUM_LEDS   200     // Total number of LEDs in your strip
 #define LED_TYPE   WS2811  // Type of LED strip
 #define COLOR_ORDER RGB    // Color order
-#define MAX_BRIGHTNESS 25      // LED brightness
-#define NUM_FRAMES 25       // Number of frames in the calibration pattern
-#define MAX_GIF_FRAMES 30   // Maximum number of frames supported from GIF upload
+#define MAX_BRIGHTNESS 60      // LED brightness
+#define NUM_CAL_STEPS 5      // Number of calibration steps
+#define NUM_FRAMES 5       // Number of frames in the calibration pattern
 #define FRAME_DELAY 200    // Delay between frames in milliseconds
 
 struct Coord { int x; int y; };
 
 CRGB patternTable [NUM_LEDS][NUM_FRAMES] = {};
-
-CRGB gifFrames[MAX_GIF_FRAMES][NUM_LEDS]; // Array to store GIF frames
 
 CRGB leds[NUM_LEDS];      // Array to store LED color values
 
@@ -34,13 +32,11 @@ AsyncWebServer server(80);
 
 bool calibration_mode = false;
 
-int gif_frames = 0;
-
 CRGB getColorFromChar(char c);
 void playCalibrationSequence();
 bool connectToWiFi(unsigned long timeoutMs = 15000);
 void UpAndDownEffect();
-void playGIF(int frameDelayMs);
+void RainbowEffect();
 
 void setup() {
   Serial.begin(115200);
@@ -112,30 +108,6 @@ void setup() {
     }
   });
 
-  server.on("/gifupload", HTTP_POST, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", "GIF received");
-  }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    size_t expected = NUM_LEDS * MAX_GIF_FRAMES * 3;
-    if (len > expected) {
-      request->send(400, "text/plain", "GIF too large");
-      return;
-    }
-
-    gif_frames = len / (NUM_LEDS * 3);
-
-    size_t idx = 0;
-    for (int f = 0; f < MAX_GIF_FRAMES; f++) {
-      for (int i = 0; i < NUM_LEDS; i++) {
-        idx = (f * NUM_LEDS + i) * 3;
-        gifFrames[f][i].r = data[idx];
-        gifFrames[f][i].g = data[idx + 1];
-        gifFrames[f][i].b = data[idx + 2];
-      }
-    }
-
-    request->send(200, "text/plain", "GIF frames stored!");
-  });
-
   server.begin();
 
   delay(1000); // Wait a moment before starting
@@ -166,9 +138,7 @@ void loop() {
   }
   else {
     if(ledCoords[0].x == 0 && ledCoords[0].y == 0)
-      return; // no coordinates set yet
-    if(gif_frames > 0)
-      playGIF(100);
+      RainbowEffect();
     else
       UpAndDownEffect();
   }
@@ -181,6 +151,20 @@ CRGB getColorFromChar(char c) {
     case 'B': return CRGB::Blue;
     default:  return CRGB::Black;
   }
+}
+
+void RainbowEffect() {
+  static uint8_t hue = 0;
+
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CHSV(hue + (i * 256 / NUM_LEDS), 255, 255);
+  }
+
+  FastLED.show();
+
+  hue++;
+
+  delay(20);
 }
 
 void UpAndDownEffect() {
@@ -231,8 +215,8 @@ void UpAndDownEffect() {
     int dist = abs((int)round(posY) - y);
     uint8_t brightness = 0;
     if (dist < bandRadius) {
-      // linear falloff
-      brightness = (uint8_t)(255 - ((uint16_t)dist * 255) / bandRadius) * (MAX_BRIGHTNESS / 255);
+      // linear falloff from MAX_BRIGHTNESS to 0
+      brightness = (uint8_t)(MAX_BRIGHTNESS - ((uint16_t)dist * MAX_BRIGHTNESS) / bandRadius);
     } else {
       brightness = 0;
     }
@@ -248,16 +232,6 @@ void UpAndDownEffect() {
   FastLED.delay(30);
 }
 
-void playGIF(int delayMs = 100) {
-  for (int f = 0; f < gif_frames; f++) {
-    for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i] = patternTable[i][f];
-    }
-    FastLED.show();
-    FastLED.delay(delayMs);
-  }
-}
-
 void playCalibrationSequence() {
     // Sync flash
     FastLED.setBrightness(MAX_BRIGHTNESS);
@@ -271,6 +245,7 @@ void playCalibrationSequence() {
 
     // Play pattern frames
   FastLED.setBrightness(1);
+  for(int step = 0; step < NUM_CAL_STEPS; step++) {
     for (int f = 0; f < NUM_FRAMES; f++) {
         for (int i = 0; i < NUM_LEDS; i++) {
             leds[i] = patternTable[i][f];
@@ -278,6 +253,7 @@ void playCalibrationSequence() {
         FastLED.show();
     FastLED.delay(FRAME_DELAY);
     }
+  }
 
     // End flash
     FastLED.setBrightness(MAX_BRIGHTNESS);
