@@ -12,6 +12,7 @@
 #define NUM_CAL_STEPS 5      // Number of calibration steps
 #define NUM_FRAMES 5       // Number of frames in the calibration pattern
 #define FRAME_DELAY 300    // Delay between frames in milliseconds
+#define MAX_GIF_FRAMES 100  // Maximum number of frames for GIF animations
 
 struct Coord { int x; int y; };
 
@@ -20,6 +21,15 @@ CRGB patternTable [NUM_LEDS][NUM_FRAMES] = {};
 CRGB leds[NUM_LEDS];      // Array to store LED color values
 
 Coord ledCoords[NUM_LEDS]; // Array to store LED coordinates
+
+// GIF animation storage
+CRGB* gifFrames = nullptr;  // Dynamic array for GIF frames
+int gifNumFrames = 0;       // Actual number of frames in current GIF
+int gifCurrentFrame = 0;    // Current frame index
+unsigned long gifLastUpdate = 0;
+int gifFrameDelay = 50;     // Delay between GIF frames in ms
+bool gifMode = false;
+bool gifPlaying = false;    // Whether a GIF is currently playing
 
 const char* ssid = "NOS-676B"; // Your WiFi SSID
 const char* password = "L4N9U7JC"; // Your WiFi password
@@ -108,6 +118,98 @@ void setup() {
     }
   });
 
+  // GIF upload endpoint - receives frame data
+  server.on("/gif", HTTP_POST, 
+    [](AsyncWebServerRequest *request){
+      request->send(200);
+    },
+    NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+      // First chunk - parse header
+      if (index == 0) {
+        // Free any existing GIF data
+        if (gifFrames != nullptr) {
+          delete[] gifFrames;
+          gifFrames = nullptr;
+        }
+        
+        // First 2 bytes = number of frames (little endian)
+        if (len < 2) {
+          request->send(400, "text/plain", "Invalid data");
+          return;
+        }
+        
+        gifNumFrames = data[0] | (data[1] << 8);
+        
+        if (gifNumFrames > MAX_GIF_FRAMES || gifNumFrames < 1) {
+          Serial.printf("Invalid frame count: %d (max: %d)\n", gifNumFrames, MAX_GIF_FRAMES);
+          request->send(400, "text/plain", "Too many frames");
+          return;
+        }
+        
+        // Allocate memory: numFrames * NUM_LEDS * sizeof(CRGB)
+        size_t totalSize = gifNumFrames * NUM_LEDS * sizeof(CRGB);
+        gifFrames = new CRGB[gifNumFrames * NUM_LEDS];
+        
+        if (gifFrames == nullptr) {
+          Serial.println("Failed to allocate memory for GIF!");
+          request->send(500, "text/plain", "Out of memory");
+          return;
+        }
+        
+        Serial.printf("Allocated memory for %d frames (%d bytes)\n", gifNumFrames, totalSize);
+        
+        // Copy frame data (skip first 2 bytes)
+        size_t dataToCopy = len - 2;
+        memcpy(gifFrames, data + 2, dataToCopy);
+      } else {
+        // Subsequent chunks - append data
+        if (gifFrames != nullptr) {
+          size_t offset = index - 2; // Account for the 2-byte header
+          memcpy((uint8_t*)gifFrames + offset, data, len);
+        }
+      }
+      
+      // Last chunk - finalize
+      if (index + len >= total) {
+        gifCurrentFrame = 0;
+        gifPlaying = true;
+        gifMode = true;
+        Serial.printf("GIF loaded: %d frames, %d LEDs per frame\n", gifNumFrames, NUM_LEDS);
+        request->send(200, "text/plain", "GIF uploaded");
+      }
+    }
+  );
+
+  // GIF control endpoint
+  server.on("/gif/control", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (request->hasParam("action")) {
+      String action = request->getParam("action")->value();
+      
+      if (action == "play") {
+        gifPlaying = true;
+        gifMode = true;
+        request->send(200, "text/plain", "Playing");
+      } else if (action == "pause") {
+        gifPlaying = false;
+        gifMode = true;
+        request->send(200, "text/plain", "Paused");
+      } else if (action == "stop") {
+        gifPlaying = false;
+        gifCurrentFrame = 0;
+        gifMode = false;
+        request->send(200, "text/plain", "Stopped");
+      } else if (action == "speed" && request->hasParam("value")) {
+        gifFrameDelay = request->getParam("value")->value().toInt();
+        request->send(200, "text/plain", "Speed updated");
+      } else {
+        request->send(400, "text/plain", "Invalid action");
+      }
+    } else {
+      request->send(400, "text/plain", "Missing action");
+    }
+  });
+
   server.begin();
 
   delay(1000); // Wait a moment before starting
@@ -136,7 +238,32 @@ void loop() {
       }
     }
   }
+  else if (gifMode && gifFrames != nullptr && gifNumFrames > 0) {
+    if (!gifPlaying) {
+      delay(1);  // Small delay to prevent WiFi issues
+      return;
+    }
+    // Play GIF animation
+    unsigned long now = millis();
+    if (now - gifLastUpdate >= gifFrameDelay) {
+      // Display current frame
+      for (int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = gifFrames[gifCurrentFrame * NUM_LEDS + i];
+      }
+      FastLED.show();
+      
+      // Move to next frame
+      gifCurrentFrame++;
+      if (gifCurrentFrame >= gifNumFrames) {
+        gifCurrentFrame = 0;  // Loop back to start
+      }
+      
+      gifLastUpdate = now;
+    }
+    delay(1);  // Small delay to prevent WiFi issues
+  }
   else {
+    // Default effects
     if(ledCoords[0].x == 0 && ledCoords[0].y == 0)
       RainbowEffect();
     else

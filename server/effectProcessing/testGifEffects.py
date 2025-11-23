@@ -8,12 +8,12 @@ import requests
 
 ESP_IP = "192.168.1.200"  # ESP's IP
 
-def preview_gif_frame(frames, frame_index=0, canvas_size=(480, 640), dot_radius=4, save_path=None, show=True):
+def preview_gif_frame(frames, frame_index=0, canvas_size=None, dot_radius=4, save_path=None, show=True):
     """Render one frame from the processed GIF as a black canvas with LEDs drawn.
 
-    - gif_path: path to source GIF
+    - frames: processed frames from GIF
     - frame_index: which frame in the processed frames to preview (0-based)
-    - canvas_size: (width, height) of the preview image
+    - canvas_size: (width, height) of the preview image. If None, auto-calculates from LED positions
     - dot_radius: radius in pixels for each LED dot
     - save_path: optional path to save the preview image
     - show: whether to open a cv2 window to display the preview
@@ -41,6 +41,17 @@ def preview_gif_frame(frames, frame_index=0, canvas_size=(480, 640), dot_radius=
     if led_positions.size == 0:
         raise ValueError("No LED positions found in led_positions.json")
 
+    # Auto-calculate canvas size if not provided
+    if canvas_size is None:
+        min_xy = led_positions.min(axis=0)
+        max_xy = led_positions.max(axis=0)
+        # Add padding around the LEDs
+        padding = 20
+        width = int(max_xy[0] - min_xy[0]) + 2 * padding
+        height = int(max_xy[1] - min_xy[1]) + 2 * padding
+        canvas_size = (width, height)
+        print(f"Auto-calculated canvas size: {canvas_size}")
+    
     # Normalize positions to canvas
     min_xy = led_positions.min(axis=0)
     max_xy = led_positions.max(axis=0)
@@ -50,8 +61,10 @@ def preview_gif_frame(frames, frame_index=0, canvas_size=(480, 640), dot_radius=
 
     width, height = canvas_size
     norm = (led_positions - min_xy) / span
-    xs = (norm[:, 0] * (width - 1)).astype(int)
-    ys = (norm[:, 1] * (height - 1)).astype(int)
+    # Add small margin to prevent LEDs at edges from being cut off
+    margin = 10
+    xs = (norm[:, 0] * (width - 2*margin) + margin).astype(int)
+    ys = (norm[:, 1] * (height - 2*margin) + margin).astype(int)
 
     # Create black canvas (BGR for OpenCV)
     canvas = np.zeros((height, width, 3), dtype=np.uint8)
@@ -77,13 +90,13 @@ def preview_gif_frame(frames, frame_index=0, canvas_size=(480, 640), dot_radius=
     return canvas
 
 
-def frames_to_video(frames, output_path, fps=15, canvas_size=(480, 640), dot_radius=4, led_positions_path=None):
+def frames_to_video(frames, output_path, fps=15, canvas_size=None, dot_radius=4, led_positions_path=None):
     """Render a list of per-LED RGB frames to a video file (MP4).
 
     frames: list/array of shape (num_frames, num_leds, 3) in RGB
     output_path: destination path (e.g. ../gifs/output.mp4)
     fps: frames per second
-    canvas_size: (width, height)
+    canvas_size: (width, height). If None, auto-calculates from LED positions
     dot_radius: LED dot radius in pixels
     led_positions_path: optional override path to led_positions.json
     """
@@ -102,6 +115,16 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=(480, 640), dot_rad
     if led_positions.size == 0:
         raise ValueError("No LED positions found in led_positions.json")
 
+    # Auto-calculate canvas size if not provided
+    if canvas_size is None:
+        min_xy = led_positions.min(axis=0)
+        max_xy = led_positions.max(axis=0)
+        padding = 20
+        width = int(max_xy[0] - min_xy[0]) + 2 * padding
+        height = int(max_xy[1] - min_xy[1]) + 2 * padding
+        canvas_size = (width, height)
+        print(f"Auto-calculated canvas size for video: {canvas_size}")
+
     min_xy = led_positions.min(axis=0)
     max_xy = led_positions.max(axis=0)
     span = max_xy - min_xy
@@ -109,8 +132,10 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=(480, 640), dot_rad
 
     width, height = canvas_size
     norm = (led_positions - min_xy) / span
-    xs = (norm[:, 0] * (width - 1)).astype(int)
-    ys = (norm[:, 1] * (height - 1)).astype(int)
+    # Add margin
+    margin = 10
+    xs = (norm[:, 0] * (width - 2*margin) + margin).astype(int)
+    ys = (norm[:, 1] * (height - 2*margin) + margin).astype(int)
 
     # Ensure output directory exists
     out_dir = os.path.dirname(output_path)
@@ -135,18 +160,18 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=(480, 640), dot_rad
 
 
 if __name__ == '__main__':
-    gif_name = "gradient"
-    gif_path = "../gifs/"+ gif_name +".gif"
+    gif_name = "candycanevertical"
+    gif_path = "gifs/"+ gif_name +".gif"
     frames = gifEffects.process_gif_effects(gif_path)
 
     frames_np = np.concatenate(frames, axis=0)
-    requests.post(f"http://{ESP_IP}/gifupload", data=frames_np.tobytes())
+    #requests.post(f"http://{ESP_IP}/gifupload", data=frames_np.tobytes())
 
-    # Preview first frame
-    #preview_gif_frame(frames, frame_index=0, canvas_size=(480, 640), dot_radius=4,
+    # Preview first frame (canvas size auto-calculated from LED positions)
+    #preview_gif_frame(frames, frame_index=0, dot_radius=4,
     #                  save_path="../gifs/"+ gif_name +"_frame0_preview.png", show=False)
 
-    # Save to video
-    #output_video_path = "../gifs/"+ gif_name +"_preview.mp4"
-    #frames_to_video(frames, output_video_path, fps=15, canvas_size=(480, 640), dot_radius=4)
-    #print(f"Saved preview video to {output_video_path}")
+    # Save to video (canvas size auto-calculated from LED positions)
+    output_video_path = "gifs/"+ gif_name +"_preview.mp4"
+    frames_to_video(frames, output_video_path, fps=15, dot_radius=4)
+    print(f"Saved preview video to {output_video_path}")

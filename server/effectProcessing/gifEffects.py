@@ -6,7 +6,7 @@ import cv2
 import os
 
 def process_gif_effects(gif_path):
-    with open("../jsons/led_positions.json") as f:
+    with open("jsons/led_positions.json") as f:
         led_positions = json.load(f)
     led_positions = np.array([pos for _, pos in led_positions])
     min_x, min_y = led_positions.min(axis=0)

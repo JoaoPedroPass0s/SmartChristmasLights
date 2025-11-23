@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify, send_from_directory
 from calibration.image_processing import analyze_video, detect_leds_in_frame
-import requests, json, os, time
+import requests, json, os, time, struct
 from calibration import image_processing
+from effectProcessing import gifEffects
 
 ESP_URL = "http://192.168.1.200"  # ESP's IP
 
@@ -115,6 +116,118 @@ def send_new_led_mapping(matched=None):
             else:
                 app.logger.error("All attempts failed to reach ESP %s", url)
                 return jsonify({"status": "error", "error": str(e)}), 502
+
+@app.route("/list_gifs", methods=["GET"])
+def list_gifs():
+    """List all available GIF files in the gifs directory"""
+    gifs_dir = os.path.join(os.path.dirname(__file__), "gifs")
+    
+    if not os.path.exists(gifs_dir):
+        return jsonify({"status": "error", "message": "GIFs directory not found"}), 404
+    
+    gif_files = [f for f in os.listdir(gifs_dir) if f.endswith('.gif')]
+    gif_files.sort()
+    
+    return jsonify({
+        "status": "ok",
+        "gifs": gif_files,
+        "count": len(gif_files)
+    }), 200
+
+@app.route("/send_gif", methods=["POST"])
+def send_gif():
+    """
+    Process and send a GIF animation to the ESP
+    Expects JSON: {"gif_name": "gradient.gif"} or {"gif_path": "/full/path/to/file.gif"}
+    """
+    data = request.json
+    
+    if "gif_name" in data:
+        gif_name = data["gif_name"]
+        gif_path = os.path.join(os.path.dirname(__file__), "gifs", gif_name)
+    elif "gif_path" in data:
+        gif_path = data["gif_path"]
+    else:
+        return jsonify({"status": "error", "message": "Missing gif_name or gif_path"}), 400
+    
+    if not os.path.exists(gif_path):
+        return jsonify({"status": "error", "message": f"GIF not found: {gif_path}"}), 404
+    
+    try:
+        app.logger.info(f"Processing GIF: {gif_path}")
+        
+        # Process the GIF
+        frames = gifEffects.process_gif_effects(gif_path)
+        num_frames = len(frames)
+        
+        app.logger.info(f"Processed {num_frames} frames")
+        
+        # Limit to 100 frames
+        if num_frames > 100:
+            app.logger.warning(f"Truncating {num_frames} frames to 100")
+            frames = frames[:100]
+            num_frames = 100
+        
+        # Build payload: [2-byte frame count][RGB data]
+        payload = bytearray(struct.pack('<H', num_frames))
+        
+        for frame in frames:
+            for led in frame:
+                payload.extend(led)  # Append R, G, B bytes
+        
+        total_size = len(payload)
+        app.logger.info(f"Payload size: {total_size} bytes ({total_size / 1024:.2f} KB)")
+        
+        # Send to ESP
+        url = f"{ESP_URL}/gif"
+        app.logger.info(f"Sending GIF to {url}")
+        
+        resp = requests.post(url, data=payload, timeout=30)
+        app.logger.info(f"ESP response: {resp.status_code} - {resp.text}")
+        
+        return jsonify({
+            "status": "ok",
+            "gif": os.path.basename(gif_path),
+            "frames": num_frames,
+            "size_kb": round(total_size / 1024, 2),
+            "esp_response": resp.text
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error sending GIF: {str(e)}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route("/gif_control", methods=["POST"])
+def gif_control():
+    """
+    Control GIF playback on ESP
+    Expects JSON: {"action": "play|pause|stop|speed", "value": <speed_ms>}
+    """
+    data = request.json
+    action = data.get("action")
+    
+    if not action:
+        return jsonify({"status": "error", "message": "Missing action parameter"}), 400
+    
+    url = f"{ESP_URL}/gif/control"
+    params = {"action": action}
+    
+    if action == "speed" and "value" in data:
+        params["value"] = data["value"]
+    
+    try:
+        resp = requests.get(url, params=params, timeout=5)
+        app.logger.info(f"GIF control: {action} - {resp.text}")
+        
+        return jsonify({
+            "status": "ok",
+            "action": action,
+            "esp_response": resp.text
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error controlling GIF: {str(e)}")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

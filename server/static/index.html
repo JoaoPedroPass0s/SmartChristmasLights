@@ -11,6 +11,30 @@
     <button id="calibration-btn">Start Calibration</button>
     <button id="choose-effect-btn">Change Effect</button>
   </section>
+
+  <!-- Effect Selection Modal -->
+  <div id="effect-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Choose Effect</h2>
+      
+      <div class="effect-section">
+        <h3>GIF Animations</h3>
+        <div id="gif-list" class="gif-grid">
+          Loading GIFs...
+        </div>
+        <div class="playback-controls" id="playback-controls" style="display:none;">
+          <h4>Playback Control</h4>
+          <button onclick="controlGif('play')">▶️ Play</button>
+          <button onclick="controlGif('pause')">⏸️ Pause</button>
+          <button onclick="controlGif('stop')">⏹️ Stop</button>
+          <label>Speed (ms): <input type="number" id="gif-speed" value="50" min="10" max="500" step="10">
+          <button onclick="setGifSpeed()">Set</button></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="tree-wrapper">
     <img src="tree.png" alt="Tree" class="tree-base">
     <div class="tree-mask"></div>
