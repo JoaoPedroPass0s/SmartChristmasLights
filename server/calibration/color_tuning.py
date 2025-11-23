@@ -33,7 +33,9 @@ def optimize_color_ranges_with_feedback(video_path, mappings_path, max_iteration
     base_ranges = {
         'R': {'lower': default_ranges['R'][0].tolist(), 'upper': default_ranges['R'][1].tolist()},
         'G': {'lower': default_ranges['G'][0].tolist(), 'upper': default_ranges['G'][1].tolist()},
-        'B': {'lower': default_ranges['B'][0].tolist(), 'upper': default_ranges['B'][1].tolist()}
+        'B': {'lower': default_ranges['B'][0].tolist(), 'upper': default_ranges['B'][1].tolist()},
+        'blur': default_ranges['blur'],
+        'area': default_ranges['area']
     }
     
     print(f"🎯 Target: Detect {num_leds} LEDs reliably")
@@ -44,7 +46,9 @@ def optimize_color_ranges_with_feedback(video_path, mappings_path, max_iteration
         color_ranges_formatted = {
             'R': (np.array(ranges['R']['lower']), np.array(ranges['R']['upper'])),
             'G': (np.array(ranges['G']['lower']), np.array(ranges['G']['upper'])),
-            'B': (np.array(ranges['B']['lower']), np.array(ranges['B']['upper']))
+            'B': (np.array(ranges['B']['lower']), np.array(ranges['B']['upper'])),
+            'blur': ranges['blur'],
+            'area': ranges['area']
         }
         
         # Run the actual detection pipeline with these ranges
@@ -107,6 +111,21 @@ def optimize_color_ranges_with_feedback(video_path, mappings_path, max_iteration
             for i in range(3):
                 if new_ranges[color]['lower'][i] >= new_ranges[color]['upper'][i]:
                     new_ranges[color]['lower'][i] = max(0, new_ranges[color]['upper'][i] - 5)
+        
+        # Mutate blur (must be odd number between 3 and 21)
+        new_ranges['blur'] = ranges['blur']
+        if np.random.random() < mutation_rate:
+            delta = np.random.choice([-2, 0, 2])  # Change by ±2 to keep it odd
+            new_ranges['blur'] = np.clip(ranges['blur'] + delta, 3, 21)
+            # Ensure it's odd
+            if new_ranges['blur'] % 2 == 0:
+                new_ranges['blur'] = max(3, new_ranges['blur'] - 1)
+        
+        # Mutate min_area (between 1 and 50)
+        new_ranges['area'] = ranges['area']
+        if np.random.random() < mutation_rate:
+            delta = np.random.randint(-3, 4)
+            new_ranges['area'] = np.clip(ranges['area'] + delta, 1, 50)
         
         return new_ranges
     
@@ -171,6 +190,8 @@ def optimize_color_ranges_with_feedback(video_path, mappings_path, max_iteration
             'lower': [int(x) for x in best_ranges[color]['lower']],
             'upper': [int(x) for x in best_ranges[color]['upper']]
         }
+    best_ranges_serializable['blur'] = int(best_ranges['blur'])
+    best_ranges_serializable['area'] = int(best_ranges['area'])
     
     # Save optimized ranges
     output_json = "color_ranges_optimized.json"
@@ -178,12 +199,17 @@ def optimize_color_ranges_with_feedback(video_path, mappings_path, max_iteration
         json.dump(best_ranges_serializable, f, indent=2)
     
     print(f"\n💾 Saved optimized ranges to {output_json}")
-    print("\n📋 Copy these to image_processing.py (line 8-12):")
-    print("masks = {")
+    print("\n📋 Optimized parameters:")
+    print(f"   Blur kernel: {best_ranges['blur']}")
+    print(f"   Min area: {best_ranges['area']}")
+    print("\n📋 Copy these to image_processing.py (line 7-15):")
+    print("default_ranges = {")
     for color in ['R', 'G', 'B']:
         lower = best_ranges[color]['lower']
         upper = best_ranges[color]['upper']
-        print(f"    '{color}': cv2.inRange(hsv, np.array({lower}), np.array({upper})),")
+        print(f"    '{color}': (np.array({lower}), np.array({upper})),")
+    print(f"    'blur': {best_ranges['blur']},")
+    print(f"    'area': {best_ranges['area']}")
     print("}")
     
     return best_ranges

@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 
 default_ranges = {
-    'R': (np.array([144, 180, 57]), np.array([179, 255, 252])),
-    'G': (np.array([37, 79, 83]), np.array([85, 255, 240])),
-    'B': (np.array([97, 115, 111]), np.array([124, 255, 255])),
+    'R': (np.array([130, 180, 41]), np.array([179, 255, 255])),
+    'G': (np.array([41, 63, 83]), np.array([85, 255, 235])),
+    'B': (np.array([97, 120, 111]), np.array([122, 250, 255])),
+    'blur' : 3,
+    'area' : 5
 }
 
 def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="led_debug_frames", color_ranges=default_ranges):
@@ -17,7 +19,7 @@ def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="le
         'G': cv2.inRange(hsv, color_ranges['G'][0], color_ranges['G'][1]),
         'B': cv2.inRange(hsv, color_ranges['B'][0], color_ranges['B'][1]),
     }
-    masks = {color: cv2.GaussianBlur(mask, (7,7), 0) for color, mask in masks.items()}
+    masks = {color: cv2.GaussianBlur(mask, (color_ranges['blur'],color_ranges['blur']), 0) for color, mask in masks.items()}
 
     detections = []
     debug_vis = frame.copy()
@@ -26,7 +28,7 @@ def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="le
     for color, mask in masks.items():
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
-            if cv2.contourArea(c) > 10:
+            if cv2.contourArea(c) > color_ranges['area'] :
                 x, y, w, h = cv2.boundingRect(c)
                 cx, cy = x + w // 2, y + h // 2
                 detections.append((cx, cy, color))
@@ -52,37 +54,129 @@ def detect_leds_in_frame(frame, step_id=0, frame_id=0, debug=False, save_dir="le
 
     return detections
 
-def find_sync_frames(video_path):
+def detect_dominant_color(frame):
+    """Detect the dominant color in a frame (R, G, or B)"""
+    # Convert to HSV for better color detection
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    
+    # Count pixels in each color range
+    red_mask = cv2.inRange(hsv, default_ranges['R'][0], default_ranges['R'][1])
+    green_mask = cv2.inRange(hsv, default_ranges['G'][0], default_ranges['G'][1])
+    blue_mask = cv2.inRange(hsv, default_ranges['B'][0], default_ranges['B'][1])
+    
+    red_count = np.count_nonzero(red_mask)
+    green_count = np.count_nonzero(green_mask)
+    blue_count = np.count_nonzero(blue_mask)
+    
+    # Return the dominant color
+    max_count = max(red_count, green_count, blue_count)
+    if max_count < 100:  # Too few colored pixels
+        return None
+    
+    if red_count == max_count:
+        return 'R'
+    elif green_count == max_count:
+        return 'G'
+    else:
+        return 'B'
+
+def find_sync_frames(video_path, debug=False):
+    """
+    Detect calibration start and end by finding color-coded sync patterns.
+    Start pattern: Red → Green → Blue
+    End pattern: Blue → Green → Red (reverse)
+    """
     cap = cv2.VideoCapture(video_path)
     brightness = []
+    colors = []
+    frame_count = 0
+    
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         brightness.append(np.mean(gray))
+        colors.append(detect_dominant_color(frame))
+        frame_count += 1
     cap.release()
 
     brightness = np.array(brightness)
-    # Find spikes (start/end flashes)
-    threshold = brightness.mean() + 2 * brightness.std()
-    sync_indices = np.where(brightness > threshold)[0]
+    
+    if debug:
+        print(f"📊 Video Analysis:")
+        print(f"   Total frames: {frame_count}")
+        print(f"   Mean brightness: {brightness.mean():.1f}")
+    
+    # Look for the start pattern: R → G → B
+    start_frame = 0
+    for i in range(len(colors) - 20):
+        # Look for R, G, B sequence within a small window
+        window = colors[i:i+20]
+        if 'R' in window and 'G' in window and 'B' in window:
+            r_idx = window.index('R')
+            # Check if G comes after R and B comes after G
+            try:
+                g_idx = window[r_idx:].index('G') + r_idx
+                b_idx = window[g_idx:].index('B') + g_idx
+                if r_idx < g_idx < b_idx:
+                    start_frame = i + b_idx + 10  # Start after Blue flash
+                    if debug:
+                        print(f"   🟢 Found START pattern at frame {i}: R→G→B")
+                    break
+            except ValueError:
+                continue
+    
+    # Look for the end pattern: B → G → R (reverse)
+    end_frame = frame_count - 1
+    for i in range(len(colors) - 20, 0, -1):
+        window = colors[i:i+20]
+        if 'B' in window and 'G' in window and 'R' in window:
+            b_idx = window.index('B')
+            try:
+                g_idx = window[b_idx:].index('G') + b_idx
+                r_idx = window[g_idx:].index('R') + g_idx
+                if b_idx < g_idx < r_idx:
+                    end_frame = i + b_idx  # End before Blue flash
+                    if debug:
+                        print(f"   🔴 Found END pattern at frame {i}: B→G→R")
+                    break
+            except ValueError:
+                continue
+    
+    if debug:
+        print(f"   📍 Start frame: {start_frame}")
+        print(f"   📍 End frame: {end_frame}")
+        print(f"   ⏱️  Calibration duration: {end_frame - start_frame} frames")
+    
+    sync_indices = np.array([start_frame, end_frame])
     return sync_indices, brightness
 
 def analyze_video(video_path, debug=False, color_ranges=default_ranges):
-    sync_indices, brightness = find_sync_frames(video_path)
+    sync_indices, brightness = find_sync_frames(video_path, debug=debug)
     start, end = sync_indices[0], sync_indices[-1]
+    
+    if debug:
+        print(f"\n🎬 Analyzing video from frame {start} to {end}")
 
     cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    
+    # Convert frame number to milliseconds
+    start_ms = (start / fps) * 1000.0
+    
+    if debug:
+        print(f"   FPS: {fps}")
+        print(f"   Start frame {start} = {start_ms:.1f} ms")
 
     frame_id = 0
     step_id = 0
     results = []
 
-    cap = cv2.VideoCapture(video_path)
-    target_interval_s = 0.2
-    cap.set(cv2.CAP_PROP_POS_MSEC, start)
-    next_target_ms = 3600.0
+    target_interval_s = 0.3
+    if debug:
+        print(f"   Starting analysis at {cap.get(cv2.CAP_PROP_POS_MSEC):.1f} ms")
+    next_target_ms = start_ms + 2250.0  # Start sampling 2500ms after sync
 
     while True:
         ret, frame = cap.read()
@@ -112,26 +206,89 @@ def analyze_video(video_path, debug=False, color_ranges=default_ranges):
     return results
 
 def group_detections(results):
-    leds_detected = []
-    for i in range(len(results)):
-        step_id, detections = results[i]
-        if(step_id == 0):
+    """
+    Improved detection grouping with dynamic position tracking and outlier rejection.
+    Uses clustering across all frames instead of just anchoring to frame 0.
+    """
+    if not results:
+        return []
+    
+    # Strategy: Build LED tracks by clustering detections across ALL frames
+    led_tracks = []  # Each track: {'positions': [(x,y), ...], 'colors': [color, ...]}
+    
+    for frame_idx, (step_id, detections) in enumerate(results):
+        if frame_idx == 0:
+            # Initialize tracks from first frame
             for (x, y, color) in detections:
-                leds_detected.append(((x, y), [color]))
-            continue
-        for pos, colors in leds_detected:
-            closest_led_idx = None
-            distance_closest_led = None
-            for (i, (x, y, color)) in enumerate(detections):
-                distance = np.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2)
-                if closest_led_idx is None or (distance < distance_closest_led):
-                    closest_led_idx = i
-                    distance_closest_led = distance
-            if closest_led_idx is not None:
-                colors.append(detections[closest_led_idx][2])
-
-    # Remove entries with fewer than 15 observations.
-    leds_detected = [(pos, colors) for (pos, colors) in leds_detected if len(colors) >= 15]
+                led_tracks.append({
+                    'positions': [(x, y)],
+                    'colors': [color],
+                    'avg_pos': (x, y)  # Running average position
+                })
+        else:
+            # Match detections to existing tracks
+            used_detections = set()
+            
+            for track in led_tracks:
+                # Find closest detection to this track's average position
+                avg_x, avg_y = track['avg_pos']
+                best_match = None
+                best_distance = float('inf')
+                
+                for det_idx, (x, y, color) in enumerate(detections):
+                    if det_idx in used_detections:
+                        continue
+                    
+                    distance = np.sqrt((x - avg_x) ** 2 + (y - avg_y) ** 2)
+                    
+                    # Match if within reasonable distance (15 pixels)
+                    if distance < 15.0 and distance < best_distance:
+                        best_match = det_idx
+                        best_distance = distance
+                
+                if best_match is not None:
+                    x, y, color = detections[best_match]
+                    track['positions'].append((x, y))
+                    track['colors'].append(color)
+                    
+                    # Update running average position (helps track slight movements)
+                    positions = track['positions']
+                    track['avg_pos'] = (
+                        np.mean([p[0] for p in positions]),
+                        np.mean([p[1] for p in positions])
+                    )
+                    
+                    used_detections.add(best_match)
+                else:
+                    # No detection found for this track in this frame
+                    track['colors'].append('N')
+            
+            # Add any unmatched detections as new tracks (late-appearing LEDs)
+            for det_idx, (x, y, color) in enumerate(detections):
+                if det_idx not in used_detections:
+                    # Check if this is really a new LED or just noise
+                    # Only add if we're still early in the sequence
+                    if frame_idx < len(results) // 3:
+                        led_tracks.append({
+                            'positions': [(x, y)],
+                            'colors': [color],
+                            'avg_pos': (x, y)
+                        })
+    
+    # Convert tracks to final format with quality filtering
+    leds_detected = []
+    min_detections = max(15, len(results) * 0.6)  # Need 60% detection rate minimum
+    
+    for track in led_tracks:
+        if len(track['colors']) >= min_detections:
+            # Use median position instead of first position (more robust)
+            positions = track['positions']
+            median_pos = (
+                int(np.median([p[0] for p in positions])),
+                int(np.median([p[1] for p in positions]))
+            )
+            leds_detected.append((median_pos, track['colors']))
+    
     return leds_detected
 
 def match_leds(mappings, grouped, debug = False, save_dir="led_debug_frames", base_frame_path=None):
@@ -288,12 +445,11 @@ def led_calibration(video_path, debug=False):
     
     matched = match_leds(mappings,grouped)
 
-    matched = fill_missing_leds(matched, len(mappings))
-
     corrected_matched = correct_outliers(matched)
+
+    all_leds = fill_missing_leds(corrected_matched, len(mappings))
 
     led_positions_path = jsons_dir / 'led_positions.json'
     with open(led_positions_path, 'w') as fh:
-        json.dump(corrected_matched, fh)
-
-    return corrected_matched
+        json.dump(all_leds, fh)
+    return all_leds

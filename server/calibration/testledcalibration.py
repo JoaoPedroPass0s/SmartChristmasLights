@@ -79,6 +79,6 @@ def send_new_led_mapping(matched=None):
 if __name__ == "__main__":
     test_video_path = "../tmp_video.mp4"  # Path to the test video
     test_led_detection(test_video_path, debug=True)
-    matched = image_processing.led_calibration(test_video_path, True)
+    matched = image_processing.led_calibration(test_video_path,True)
     send_new_led_mapping(matched)
     #image_processing.draw_leds_on_frame(matched, save_dir="led_debug_frames")

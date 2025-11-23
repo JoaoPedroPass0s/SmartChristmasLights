@@ -11,7 +11,7 @@
 #define MAX_BRIGHTNESS 60      // LED brightness
 #define NUM_CAL_STEPS 5      // Number of calibration steps
 #define NUM_FRAMES 5       // Number of frames in the calibration pattern
-#define FRAME_DELAY 200    // Delay between frames in milliseconds
+#define FRAME_DELAY 300    // Delay between frames in milliseconds
 
 struct Coord { int x; int y; };
 
@@ -233,15 +233,35 @@ void UpAndDownEffect() {
 }
 
 void playCalibrationSequence() {
-    // Sync flash
+    // Start sync sequence: Red -> Green -> Blue (unique pattern)
     FastLED.setBrightness(MAX_BRIGHTNESS);
   FastLED.delay(500);
-    fill_solid(leds, NUM_LEDS, CRGB::White);
+    
+    // Red flash
+    fill_solid(leds, NUM_LEDS, CRGB::Red);
     FastLED.show();
-  FastLED.delay(1000);
+    FastLED.delay(400);
     FastLED.clear();
     FastLED.show();
-  FastLED.delay(1000);
+    FastLED.delay(200);
+    
+    // Green flash
+    fill_solid(leds, NUM_LEDS, CRGB::Green);
+    FastLED.show();
+    FastLED.delay(400);
+    FastLED.clear();
+    FastLED.show();
+    FastLED.delay(200);
+    
+    // Blue flash
+    fill_solid(leds, NUM_LEDS, CRGB::Blue);
+    FastLED.show();
+    FastLED.delay(400);
+    FastLED.clear();
+    FastLED.show();
+    
+    // Longer delay to let camera auto-focus and exposure stabilize
+    FastLED.delay(2000);  // 2 seconds for camera to adjust
 
     // Play pattern frames
   FastLED.setBrightness(1);
@@ -255,11 +275,29 @@ void playCalibrationSequence() {
     }
   }
 
-    // End flash
+    // End sync sequence: Blue -> Green -> Red (reverse pattern)
     FastLED.setBrightness(MAX_BRIGHTNESS);
-    fill_solid(leds, NUM_LEDS, CRGB::White);
+    
+    // Blue flash
+    fill_solid(leds, NUM_LEDS, CRGB::Blue);
     FastLED.show();
-  FastLED.delay(1000);
+    FastLED.delay(400);
+    FastLED.clear();
+    FastLED.show();
+    FastLED.delay(200);
+    
+    // Green flash
+    fill_solid(leds, NUM_LEDS, CRGB::Green);
+    FastLED.show();
+    FastLED.delay(400);
+    FastLED.clear();
+    FastLED.show();
+    FastLED.delay(200);
+    
+    // Red flash
+    fill_solid(leds, NUM_LEDS, CRGB::Red);
+    FastLED.show();
+    FastLED.delay(400);
     FastLED.clear();
 }
 
