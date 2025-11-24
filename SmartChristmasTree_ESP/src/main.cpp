@@ -3,6 +3,7 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPAsyncTCP.h>
+#include <LittleFS.h>
 
 #define LED_PIN    D4      // Pin connected to the Data input of the WS2811 strip
 #define NUM_LEDS   200     // Total number of LEDs in your strip
@@ -22,14 +23,15 @@ CRGB leds[NUM_LEDS];      // Array to store LED color values
 
 Coord ledCoords[NUM_LEDS]; // Array to store LED coordinates
 
-// GIF animation storage
-CRGB* gifFrames = nullptr;  // Dynamic array for GIF frames
+// GIF animation storage (using SPIFFS instead of RAM)
+CRGB gifFrameBuffer[NUM_LEDS];  // Single frame buffer (only 600 bytes in RAM!)
 int gifNumFrames = 0;       // Actual number of frames in current GIF
 int gifCurrentFrame = 0;    // Current frame index
 unsigned long gifLastUpdate = 0;
 int gifFrameDelay = 50;     // Delay between GIF frames in ms
 bool gifMode = false;
 bool gifPlaying = false;    // Whether a GIF is currently playing
+File gifFile;               // File handle for reading frames from flash
 
 const char* ssid = "NOS-676B"; // Your WiFi SSID
 const char* password = "L4N9U7JC"; // Your WiFi password
@@ -47,9 +49,21 @@ void playCalibrationSequence();
 bool connectToWiFi(unsigned long timeoutMs = 15000);
 void UpAndDownEffect();
 void RainbowEffect();
+void playGIFAnimation();
 
 void setup() {
   Serial.begin(115200);
+  delay(500);
+  
+  // Initialize LittleFS for GIF storage
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS mount failed!");
+  } else {
+    Serial.println("LittleFS mounted successfully");
+    FSInfo fs_info;
+    LittleFS.info(fs_info);
+    Serial.printf("Total: %d bytes, Used: %d bytes\n", fs_info.totalBytes, fs_info.usedBytes);
+  }
 
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setBrightness(MAX_BRIGHTNESS);
@@ -118,21 +132,17 @@ void setup() {
     }
   });
 
-  // GIF upload endpoint - receives frame data
+  // GIF upload endpoint - saves frame data to SPIFFS
   server.on("/gif", HTTP_POST, 
     [](AsyncWebServerRequest *request){
       request->send(200);
     },
     NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-      // First chunk - parse header
+      static File uploadFile;
+      
+      // First chunk - parse header and create file
       if (index == 0) {
-        // Free any existing GIF data
-        if (gifFrames != nullptr) {
-          delete[] gifFrames;
-          gifFrames = nullptr;
-        }
-        
         // First 2 bytes = number of frames (little endian)
         if (len < 2) {
           request->send(400, "text/plain", "Invalid data");
@@ -141,42 +151,44 @@ void setup() {
         
         gifNumFrames = data[0] | (data[1] << 8);
         
-        if (gifNumFrames > MAX_GIF_FRAMES || gifNumFrames < 1) {
-          Serial.printf("Invalid frame count: %d (max: %d)\n", gifNumFrames, MAX_GIF_FRAMES);
-          request->send(400, "text/plain", "Too many frames");
+        if (gifNumFrames < 1) {
+          Serial.printf("Invalid frame count: %d\n", gifNumFrames);
+          request->send(400, "text/plain", "Invalid frame count");
           return;
         }
         
-        // Allocate memory: numFrames * NUM_LEDS * sizeof(CRGB)
+        // Remove MAX_GIF_FRAMES limit - SPIFFS can handle any size!
         size_t totalSize = gifNumFrames * NUM_LEDS * sizeof(CRGB);
-        gifFrames = new CRGB[gifNumFrames * NUM_LEDS];
+        Serial.printf("Receiving GIF: %d frames (%d bytes total)\n", gifNumFrames, totalSize);
         
-        if (gifFrames == nullptr) {
-          Serial.println("Failed to allocate memory for GIF!");
-          request->send(500, "text/plain", "Out of memory");
+        // Create/overwrite file in SPIFFS
+        uploadFile = LittleFS.open("/gif.dat", "w");
+        if (!uploadFile) {
+          Serial.println("Failed to create GIF file!");
+          request->send(500, "text/plain", "Storage error");
           return;
         }
         
-        Serial.printf("Allocated memory for %d frames (%d bytes)\n", gifNumFrames, totalSize);
-        
-        // Copy frame data (skip first 2 bytes)
+        // Write frame data (skip first 2 bytes header)
         size_t dataToCopy = len - 2;
-        memcpy(gifFrames, data + 2, dataToCopy);
+        uploadFile.write(data + 2, dataToCopy);
       } else {
-        // Subsequent chunks - append data
-        if (gifFrames != nullptr) {
-          size_t offset = index - 2; // Account for the 2-byte header
-          memcpy((uint8_t*)gifFrames + offset, data, len);
+        // Subsequent chunks - append data to file
+        if (uploadFile) {
+          uploadFile.write(data, len);
         }
       }
       
       // Last chunk - finalize
       if (index + len >= total) {
+        if (uploadFile) {
+          uploadFile.close();
+          Serial.printf("GIF saved to SPIFFS: %d frames, %d LEDs per frame\n", gifNumFrames, NUM_LEDS);
+        }
         gifCurrentFrame = 0;
         gifPlaying = true;
         gifMode = true;
-        Serial.printf("GIF loaded: %d frames, %d LEDs per frame\n", gifNumFrames, NUM_LEDS);
-        request->send(200, "text/plain", "GIF uploaded");
+        request->send(200, "text/plain", "GIF uploaded to flash storage");
       }
     }
   );
@@ -219,14 +231,28 @@ void setup() {
   }
   FastLED.show();
 
+  // Check if a GIF file exists in SPIFFS And Play it
+  File f = LittleFS.open("/gif.dat", "r");
+  if(f && f.size() > 0){
+    // GIF in File exists
+    size_t fileSize = f.size();
+    gifNumFrames = fileSize / (NUM_LEDS * sizeof(CRGB));
+    gifCurrentFrame = 0;
+    gifMode = true;
+    gifPlaying = true;
+    Serial.printf("Found existing GIF in flash: %d bytes, %d frames\n", fileSize, gifNumFrames);
+    f.close();
+  } else {
+    if(f) f.close();
+  }
+
   Serial.println("Setup complete (:");
   delay(1000); // Wait a moment before starting
 }
 
 void loop() {
   if (calibration_mode) {
-    // Keep the webserver and WiFi active during calibration so the PC can
-    // continue communicating. Do not call server.end() or WiFi.disconnect().
+    // Keep the webserver and WiFi 
     delay(1000);
     playCalibrationSequence();
     calibration_mode = false;
@@ -238,29 +264,8 @@ void loop() {
       }
     }
   }
-  else if (gifMode && gifFrames != nullptr && gifNumFrames > 0) {
-    if (!gifPlaying) {
-      delay(1);  // Small delay to prevent WiFi issues
-      return;
-    }
-    // Play GIF animation
-    unsigned long now = millis();
-    if (now - gifLastUpdate >= gifFrameDelay) {
-      // Display current frame
-      for (int i = 0; i < NUM_LEDS; i++) {
-        leds[i] = gifFrames[gifCurrentFrame * NUM_LEDS + i];
-      }
-      FastLED.show();
-      
-      // Move to next frame
-      gifCurrentFrame++;
-      if (gifCurrentFrame >= gifNumFrames) {
-        gifCurrentFrame = 0;  // Loop back to start
-      }
-      
-      gifLastUpdate = now;
-    }
-    delay(1);  // Small delay to prevent WiFi issues
+  else if (gifMode && gifNumFrames > 0) {
+    playGIFAnimation();
   }
   else {
     // Default effects
@@ -278,6 +283,43 @@ CRGB getColorFromChar(char c) {
     case 'B': return CRGB::Blue;
     default:  return CRGB::Black;
   }
+}
+
+void playGIFAnimation() {
+  if (!gifPlaying) {
+    delay(1);  // Small delay to prevent WiFi issues
+    return;
+  }
+  // Play GIF animation from SPIFFS (stream one frame at a time)
+  unsigned long now = millis();
+  if (now - gifLastUpdate >= gifFrameDelay) {
+    // Open file and seek to current frame
+    File f = LittleFS.open("/gif.dat", "r");
+    if (f) {
+      // Seek to frame position
+      size_t frameOffset = gifCurrentFrame * NUM_LEDS * sizeof(CRGB);
+      f.seek(frameOffset, SeekSet);
+      
+      // Read one frame into buffer
+      f.read((uint8_t*)gifFrameBuffer, NUM_LEDS * sizeof(CRGB));
+      f.close();
+      
+      // Display frame from buffer
+      for (int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = gifFrameBuffer[i];
+      }
+      FastLED.show();
+    }
+    
+    // Move to next frame
+    gifCurrentFrame++;
+    if (gifCurrentFrame >= gifNumFrames) {
+      gifCurrentFrame = 0;  // Loop back to start
+    }
+    
+    gifLastUpdate = now;
+  }
+  delay(1);  // Small delay to prevent WiFi issues
 }
 
 void RainbowEffect() {
