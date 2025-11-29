@@ -160,7 +160,7 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=None, dot_radius=4,
 
 
 if __name__ == '__main__':
-    gif_name = "rocket"
+    gif_name = "firework"
     gif_path = "gifs/"+ gif_name +".gif"
     frames = gifEffects.process_gif_effects(gif_path)
 

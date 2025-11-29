@@ -354,12 +354,6 @@ def send_gif():
         
         app.logger.info(f"Processed {num_frames} frames")
         
-        # Limit to 100 frames
-        if num_frames > 100:
-            app.logger.warning(f"Truncating {num_frames} frames to 100")
-            frames = frames[:100]
-            num_frames = 100
-        
         # Build payload: [2-byte frame count][RGB data]
         payload = bytearray(struct.pack('<H', num_frames))
         

@@ -301,6 +301,12 @@ input[type="number"], input[type="text"] {
   .glass-panel {
     max-height: 80vh;
   }
+
+  h1{
+    font-size: 2.5rem;
+    letter-spacing: 3px;
+    margin: 25px 0;
+  }
 }
 
 /* --- Calibration Video --- */

@@ -1,67 +1,106 @@
 from PIL import Image, ImageSequence
-import requests
 import numpy as np
 import json
 import cv2
 import os
 
-def process_gif_effects(gif_path, resolution=128, use_interpolation=True, smooth_temporal=False):
+def process_gif_effects(gif_path, resolution=300, use_interpolation=True, smooth_temporal=False, gamma=2.4, saturation_boost=1.2):
+    """
+    Process GIF frames for LED display with high-detail preservation.
+    
+    Improvements:
+    1. Uses Gamma Correction (makes colors pop and shadows deeper).
+    2. Uses Saturation Boosting (LEDs look better with high saturation).
+    3. Uses Vectorized Sampling (Much faster and more precise).
+    """
+
+    # 1. Load and Normalize LED Positions
+    # We assume this file exists relative to the running script
+    if not os.path.exists("jsons/led_positions.json"):
+        print("Error: jsons/led_positions.json not found.")
+        return []
 
     with open("jsons/led_positions.json") as f:
         led_positions = json.load(f)
-    led_positions = np.array([pos for _, pos in led_positions])
-    min_x, min_y = led_positions.min(axis=0)
-    max_x, max_y = led_positions.max(axis=0)
-    led_positions_norm = (led_positions - [min_x, min_y]) / ([max_x - min_x, max_y - min_y])
+    
+    # Extract just coordinates (ignore indices if present)
+    coords = np.array([pos for _, pos in led_positions])
+    
+    # Calculate bounds
+    min_x, min_y = coords.min(axis=0)
+    max_x, max_y = coords.max(axis=0)
+    tree_width = max_x - min_x
+    tree_height = max_y - min_y
+    
+    # Normalize positions to 0.0 - 1.0 range
+    # shape: (N, 2)
+    led_positions_norm = (coords - [min_x, min_y]) / [tree_width, tree_height]
 
+    # 2. Process GIF
     im = Image.open(gif_path)
     frames = []
-    prev_colors = None
-    
+    prev_frame_data = None
+
     for frame in ImageSequence.Iterator(im):
-        # Use high-quality resampling (LANCZOS for downscaling, BICUBIC for upscaling)
-        frame = frame.convert("RGB").resize((resolution, resolution), Image.Resampling.LANCZOS)
-        pixels = np.array(frame, dtype=np.float32)
+        frame = frame.convert("RGB")
         
-        colors = []
-        for pos in led_positions_norm:
-            if use_interpolation:
-                # Use bilinear interpolation for smoother color sampling
-                x = pos[0] * (frame.width - 1)
-                y = pos[1] * (frame.height - 1)
-                
-                x0, y0 = int(np.floor(x)), int(np.floor(y))
-                x1, y1 = min(x0 + 1, frame.width - 1), min(y0 + 1, frame.height - 1)
-                
-                # Bilinear interpolation weights
-                wx = x - x0
-                wy = y - y0
-                
-                # Interpolate color values
-                c00 = pixels[y0, x0]
-                c01 = pixels[y0, x1]
-                c10 = pixels[y1, x0]
-                c11 = pixels[y1, x1]
-                
-                color = (1 - wx) * (1 - wy) * c00 + wx * (1 - wy) * c01 + \
-                        (1 - wx) * wy * c10 + wx * wy * c11
-                
-                r, g, b = color.astype(np.uint8)
-            else:
-                # Simple nearest neighbor sampling
-                x = int(pos[0] * (frame.width - 1))
-                y = int(pos[1] * (frame.height - 1))
-                r, g, b = pixels[y, x].astype(np.uint8)
-            
-            colors.append((r, g, b))
+        # --- High Quality Resize ---
+        # We resize to a higher internal resolution for sampling if needed, 
+        # but keep it manageable for performance.
+        # CV2's INTER_LANCZOS4 is excellent for preserving sharpness.
+        frame_np = np.array(frame)
         
-        colors = np.array(colors, dtype=np.uint8)
+        # Determine mapping coordinates for cv2.remap
+        # map_x and map_y need to be float32 maps of where each LED pulls pixels from
+        frame_h, frame_w = frame_np.shape[:2]
         
-        # Optional temporal smoothing to reduce flicker
-        if smooth_temporal and prev_colors is not None:
-            colors = (0.7 * colors + 0.3 * prev_colors).astype(np.uint8)
+        # Map normalized LED positions to image coordinates
+        map_x = (led_positions_norm[:, 0] * (frame_w - 1)).astype(np.float32)
+        map_y = (led_positions_norm[:, 1] * (frame_h - 1)).astype(np.float32)
+
+        # --- Vectorized Sampling (The "Detail" Fix) ---
+        # cv2.remap allows us to sample the image at arbitrary sub-pixel coordinates
+        # using high-quality interpolation methods in one go.
+        # We reshape maps to (1, N, 2) to treat the LED string as a single row of pixels
+        led_pixels = cv2.remap(
+            frame_np, 
+            map_x.reshape(1, -1), 
+            map_y.reshape(1, -1), 
+            interpolation=cv2.INTER_LANCZOS4, # High detail interpolation
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0,0,0)
+        )
         
-        prev_colors = colors.copy()
-        frames.append(colors)
+        # Result is (1, N, 3), flatten to (N, 3)
+        led_pixels = led_pixels[0]
+
+        # --- Post-Processing for LEDs ---
+        
+        # 1. Saturation Boost (LEDs love saturation)
+        if saturation_boost != 1.0:
+            # Convert to HSV, scale S, convert back
+            # This is done in float32 for precision
+            hsv = cv2.cvtColor(led_pixels.reshape(1, -1, 3), cv2.COLOR_RGB2HSV).astype(np.float32)
+            hsv[..., 1] *= saturation_boost # Scale Saturation
+            hsv[..., 1] = np.clip(hsv[..., 1], 0, 255)
+            led_pixels = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB).reshape(-1, 3)
+
+        # 2. Gamma Correction (Fixes "washed out" look)
+        # LEDs are linear, eyes are logarithmic. We apply gamma to make shadows darker
+        # and midtones richer.
+        if gamma != 1.0:
+            # Normalize to 0-1, apply power, scale back
+            led_pixels = led_pixels.astype(np.float32) / 255.0
+            led_pixels = np.power(led_pixels, gamma)
+            led_pixels = (led_pixels * 255.0)
+
+        # 3. Temporal Smoothing (Optional)
+        if smooth_temporal and prev_frame_data is not None:
+            led_pixels = (0.7 * led_pixels + 0.3 * prev_frame_data)
+        
+        prev_frame_data = led_pixels.copy()
+        
+        # Final cast to uint8
+        frames.append(led_pixels.astype(np.uint8).tolist())
 
     return frames
