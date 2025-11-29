@@ -1,173 +1,328 @@
+:root {
+  --bg-dark: #050510;
+  --bg-gradient: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  --glass-surface: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --primary-accent: #00ffcc; /* Cyber Green */
+  --secondary-accent: #ff0055; /* Cyber Red */
+  --text-main: #ffffff;
+  --text-muted: #b3b3b3;
+  --radius: 16px;
+  --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* --- Global Reset --- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 body {
-  width: max-content;
-  height: max-content;
-  font-family: sans-serif;
-  text-align: center;
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 20px;
-  background-color: rgb(0, 0, 49);
 }
 
 h1 {
-  color: white;
-  margin-bottom: 20px;
-  font-size: 80px;
-  align-items: center;
-  margin-top: 100px;
-  margin-bottom: 50px;
+  font-weight: 200;
+  letter-spacing: 1px;
+  margin: 15px 0;
+  font-size: 1.5rem;
+  text-transform: uppercase;
+  text-align: center;
+  text-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
 }
 
-button {
-  width: 40%;
-  font-size: 70px;
-  margin: 40px;
-  padding: 10px 20px;
-  color: white;
-  background-color: rgb(0, 0, 49);
-  border: 2px solid white;
-  align-items: center;
+/* --- Layout Container --- */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* --- Glass Cards --- */
+.glass-panel {
+  /* Use Flexbox to handle internal spacing adaptively */
+  display: flex;
+  flex-direction: column;
+  height: fit-content;
+  max-height: 75vh; /* Constrain height to viewport so it fits on screen */
   
+  background: var(--glass-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
 }
 
-.tree-base {
-  visibility: hidden;
+/* --- Dashboard Grid (Home) --- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
 }
 
+/* --- Tree Visualizer --- */
 .tree-wrapper {
-  width: max-content;
+  position: relative;
+  width: 90%;
+  max-width: 350px;
+  aspect-ratio: 3 / 4;
+  margin: 0 auto;
 }
 
 .tree-base {
-  position: relative;
-  z-index: 1;
-  width: 300px;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
 }
 
 .tree-mask {
   position: absolute;
-  top: 20%;
-  left: 15%;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  background: url('gifs/rainbow.gif') center/cover no-repeat;
-  -webkit-mask: url('images/pngTreeWhiteMask.png') center/contain no-repeat;
-  mask: url('images/pngTreeWhiteMask.png') center/contain no-repeat;
+  background: url('/static/gifs/rainbow.gif') center/cover no-repeat;
+  -webkit-mask: url('/static/images/pngTreeWhiteMask.png') center/contain no-repeat;
+  mask: url('/static/images/pngTreeWhiteMask.png') center/contain no-repeat;
   z-index: 2;
-  opacity: 0.9;
-  pointer-events: none;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 15px rgba(255,255,255,0.2));
+}
+
+/* --- Buttons --- */
+#buttons-section {
+  width: auto;
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+  margin-bottom: 30px;
+  justify-content: center;
   align-items: center;
 }
 
-/* responsive preview/video for calibration page */
-#preview {
-  width: 120vw;           /* fill most of the viewport width */
-  max-width: 1100px;     /* but never exceed this */
-  height: auto;          /* preserve aspect ratio */
-  border: 2px solid white;
-  margin: 20px auto 0;
-  display: block;
-}
-
-/* Modal styles */
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0, 0, 0, 0.8);
-}
-
-.modal-content {
-  background-color: rgb(0, 0, 49);
-  margin: 5% auto;
-  padding: 40px;
-  border: 3px solid white;
-  width: 80%;
-  max-width: 800px;
-  border-radius: 10px;
+button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
+  padding: 8px 10px;
+  font-size: 1rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: auto;
 }
 
-.close {
-  color: white;
-  float: right;
-  font-size: 40px;
+button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button.primary-btn {
+  background: linear-gradient(135deg, rgba(0, 255, 204, 0.2), rgba(0, 200, 255, 0.1));
+  border-color: var(--primary-accent);
   font-weight: bold;
-  cursor: pointer;
 }
 
-.close:hover,
-.close:focus {
-  color: #ccc;
-}
-
-.effect-section {
-  margin: 30px 0;
-}
-
-.effect-section h3 {
-  font-size: 32px;
-  margin-bottom: 20px;
-  color: white;
-}
-
-.effect-section h4 {
-  font-size: 24px;
-  margin: 20px 0 10px 0;
-  color: white;
-}
-
-.gif-grid {
+/* --- Effects Grid (Mobile Optimized) --- */
+.effects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 15px;
-  margin: 20px 0;
+  /* FIXED SIZE: Uses 85px columns instead of flexible ranges */
+  grid-template-columns: repeat(auto-fill, 85px);
+  justify-content: center; /* Centers the tiles if there's leftover space */
+  gap: 10px;
+  
+  /* Adaptive Height Logic */
+  flex: 1;           
+  overflow-y: auto;  
+  min-height: 0;     
+  
+  padding-right: 4px;
 }
 
-.gif-button {
-  width: 100%;
-  font-size: 18px;
-  padding: 15px;
-  margin: 0;
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 2px solid white;
-  color: white;
+.effects-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.effects-grid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2); 
+  border-radius: 3px;
+}
+
+/* Card Styling */
+.effect-card {
+  /* FIXED SIZE: explicit width and height */
+  width: 85px;
+  height: 100px;
+  
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 6px; 
+  text-align: center;
   cursor: pointer;
-  border-radius: 5px;
-  transition: all 0.3s;
+  transition: 0.2s;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* Align to top */
+  align-items: center;
+  overflow: hidden;
 }
 
-.gif-button:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
+.effect-card:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: white;
 }
 
-.playback-controls {
-  background-color: rgba(255, 255, 255, 0.05);
-  padding: 20px;
-  border-radius: 5px;
-  margin-top: 20px;
+.effect-card.selected {
+  border: 2px solid var(--primary-accent);
+  background: rgba(0, 255, 204, 0.1);
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.15);
 }
 
-.playback-controls button {
-  width: auto;
-  font-size: 16px;
-  margin: 5px;
-  padding: 10px 20px;
+/* Image Thumbnail Style */
+.effect-thumb {
+  width: 100%;
+  height: 60px; /* Fixed height for image */
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background-color: #000;
+  flex-shrink: 0; /* Prevents image from squishing */
 }
 
-.playback-controls label {
-  font-size: 18px;
-  margin: 10px;
+.effect-name {
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
 }
 
-.playback-controls input {
+/* --- Controls --- */
+.control-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.control-panel button {
+  font-size: 1rem;
+  padding: 5px 5px;
+}
+
+input[type="number"], input[type="text"] {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
   width: 80px;
-  font-size: 16px;
-  padding: 5px;
-  margin: 0 10px;
 }
 
+.text-muted {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+/* --- PC / Large Screen Overrides --- */
+@media (min-width: 900px) {
+  
+  /* Restore Larger Fixed Grid for PC */
+  .effects-grid {
+    grid-template-columns: repeat(auto-fill, 140px);
+    gap: 16px;
+  }
+  
+  .effect-card {
+    width: 140px;
+    height: 170px;
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+
+  .effect-thumb {
+    height: 110px; 
+    margin-bottom: 10px;
+  }
+
+  /* Two Column Dashboard Layout */
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  
+  .tree-panel {
+    position: sticky;
+    top: 20px;
+  }
+
+  button {
+    color: white;
+    padding: 18px 20px;
+    font-size: 1.2rem;
+    gap: 20px;
+    width: auto;
+  }
+
+  .glass-panel {
+    max-height: 80vh;
+  }
+}
+
+/* --- Calibration Video --- */
+#preview {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.1);
+  background: #000;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+#buttons-section-calibration {
+  width: auto;
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+  margin-top: 50px;
+  justify-content: center;
+}
+
+#buttons-section-calibration button {
+  padding: 12px 16px;
+  font-size: 2.5rem;
+}

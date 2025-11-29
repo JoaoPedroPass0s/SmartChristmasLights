@@ -1,10 +1,16 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from calibration.image_processing import analyze_video, detect_leds_in_frame
-import requests, json, os, time, struct
+import requests, json, os, time, struct,io
 from calibration import image_processing
 from effectProcessing import gifEffects
+from PIL import Image
 
 ESP_URL = "http://192.168.1.200"  # ESP's IP
+
+GIF_FOLDER = "gifs"
+
+# Ensure UPLOAD_DIR is defined
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")  # Default to "uploads" if not set
 
 import random
 
@@ -62,6 +68,36 @@ def index():
 def calibration():
     return send_from_directory("static", "calibration.html")
 
+@app.route("/gif_editor", methods=["GET"])
+def gif_editor():
+    return send_from_directory("static", "gif_editor.html")
+
+@app.route("/effects", methods=["GET"])
+def effects_page():
+    return send_from_directory("static", "effects.html")
+
+@app.route("/get_led_positions", methods=["GET"])
+def get_led_positions():
+    """Serve LED positions JSON for preview"""
+    led_positions_file = os.path.join(os.path.dirname(__file__), "jsons", "led_positions.json")
+    
+    if not os.path.exists(led_positions_file):
+        return jsonify({"status": "error", "message": "LED positions not found. Please run calibration first."}), 404
+    
+    try:
+        with open(led_positions_file, 'r') as f:
+            positions = json.load(f)
+        return jsonify(positions), 200
+    except Exception as e:
+        app.logger.error(f"Error loading LED positions: {str(e)}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+    
+@app.route('/get_gif_image/<path:filename>')
+def get_gif_image(filename):
+    # This assumes your GIFs are stored in a folder named 'gifs'
+    # Adjust "gifs" to "uploads" if that is where you keep them
+    return send_from_directory("gifs", filename)
+
 @app.route("/upload_video", methods=["POST"])
 def upload_video():
     video = request.files["video"]
@@ -117,6 +153,162 @@ def send_new_led_mapping(matched=None):
                 app.logger.error("All attempts failed to reach ESP %s", url)
                 return jsonify({"status": "error", "error": str(e)}), 502
 
+@app.route("/upload_gif_editor", methods=["POST"])
+def upload_gif_editor():
+    """Upload a new GIF file for editing"""
+    if 'gif' not in request.files:
+        return jsonify({"status": "error", "message": "No file provided"}), 400
+    
+    file = request.files['gif']
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No file selected"}), 400
+    
+    # Save to gifs directory
+    filename = file.filename
+    gifs_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    
+    # Create gifs directory if it doesn't exist
+    if not os.path.exists(gifs_dir):
+        os.makedirs(gifs_dir)
+    
+    filepath = os.path.join(gifs_dir, filename)
+    file.save(filepath)
+    
+    return jsonify({"status": "ok", "filename": filename}), 200
+
+@app.route('/crop_gif', methods=['POST'])
+def crop_gif():
+    data = request.json
+    gif_name = data.get("gif_name")
+    x = data.get("x")
+    y = data.get("y")
+    w = data.get("w")
+    h = data.get("h")
+
+    if not gif_name or None in (x, y, w, h):
+        return jsonify({"status": "error", "error": "Missing required parameters"}), 400
+
+    input_path = os.path.join(UPLOAD_DIR, gif_name)
+    if not os.path.exists(input_path):
+        return jsonify({"status": "error", "error": f"{gif_name} not found"}), 404
+
+    try:
+        with Image.open(input_path) as im:
+            canvas_size = im.size  # Original GIF logical size
+            frames = []
+            durations = []
+
+            for frame in range(im.n_frames):
+                im.seek(frame)
+                # Render full frame on a blank canvas
+                full_frame = Image.new("RGBA", canvas_size)
+                full_frame.paste(im.convert("RGBA"), (0, 0))
+                # Crop using coordinates
+                cropped = full_frame.crop((x, y, x + w, y + h))
+                frames.append(cropped)
+                durations.append(im.info.get("duration", 100))
+
+            # Save the cropped GIF
+            base, ext = os.path.splitext(gif_name)
+            output_name = f"{base}_cropped.gif"
+            output_path = os.path.join(UPLOAD_DIR, output_name)
+
+            frames[0].save(
+                output_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=durations,
+                loop=0,
+                disposal=2
+            )
+
+        return jsonify({"status": "ok", "output": output_name})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+# --- THE FIXED FUNCTION ---
+@app.route('/get_frames/<filename>')
+def get_frames(filename):
+    path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        LED_POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "jsons", "led_positions.json")
+        # 1. Load LED positions
+        if not os.path.exists(LED_POSITIONS_FILE):
+             return jsonify({"error": "LED positions not found"}), 404
+             
+        with open(LED_POSITIONS_FILE) as f:
+            # Expected format in JSON: [[index, [x, y]], [index, [x, y]], ...]
+            raw_data = json.load(f)
+            led_positions = [item[1] for item in raw_data]
+
+        if not led_positions:
+            return jsonify({"frames": []})
+
+        # 2. Calculate LED Bounding Box (to map coordinate space)
+        xs = [p[0] for p in led_positions]
+        ys = [p[1] for p in led_positions]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        
+        led_width = max_x - min_x if max_x != min_x else 1
+        led_height = max_y - min_y if max_y != min_y else 1
+
+        # 3. Process GIF Frames
+        gif = Image.open(path)
+        frames = []
+
+        for frame_index in range(gif.n_frames):
+            gif.seek(frame_index)
+            frame_img = gif.convert("RGB")
+            img_w, img_h = frame_img.size
+            
+            sampled_leds = []
+            
+            for (lx, ly) in led_positions:
+                # Normalize LED position (0.0 to 1.0) relative to the LED cloud
+                norm_x = (lx - min_x) / led_width
+                norm_y = (ly - min_y) / led_height
+                
+                # Map normalized position to GIF pixel coordinates
+                # We clamp values to be safe
+                gx = int(max(0, min(1, norm_x)) * (img_w - 1))
+                gy = int(max(0, min(1, norm_y)) * (img_h - 1))
+                
+                # Get color
+                r, g, b = frame_img.getpixel((gx, gy))
+                sampled_leds.append([r, g, b])
+
+            frames.append(sampled_leds)
+
+        return jsonify({"frames": frames})
+    except Exception as e:
+        app.logger.error(f"Error in get_frames: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/save_gif/<filename>", methods=["POST"])
+def save_gif(filename):
+    data = request.json
+    new_name = data.get("gif_name")
+
+    # Get Gif from uploads and save to gifs directory
+    source_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(source_path):
+        return jsonify({"status": "error", "message": "File not found"}), 404
+    dest_dir = os.path.join(os.path.dirname(__file__), "gifs")
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir)
+    dest_path = os.path.join(dest_dir, new_name + ".gif")
+    try:
+        with open(source_path, 'rb') as src_file:
+            with open(dest_path, 'wb') as dest_file:
+                dest_file.write(src_file.read())
+        return jsonify({"status": "ok", "message": "GIF saved"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 @app.route("/list_gifs", methods=["GET"])
 def list_gifs():
     """List all available GIF files in the gifs directory"""

@@ -1,134 +1,164 @@
 
 
-// guard calibration button in case this script is loaded on pages without it
-const calibBtn = document.getElementById("calibration-btn");
-if (calibBtn) {
-  calibBtn.onclick = async () => {
-    // Redirect to the calibration page (served as a static file)
-    // You can change this to a server route like '/calibration' if you prefer.
-    window.location.href = '/static/calibration.html';
-  };
-}
-
-// Effect selection modal
-const chooseEffectBtn = document.getElementById("choose-effect-btn");
-const effectModal = document.getElementById("effect-modal");
-const closeModal = document.querySelector(".close");
-
-if (chooseEffectBtn && effectModal) {
-  chooseEffectBtn.onclick = () => {
-    effectModal.style.display = "block";
-    loadGifList();
-  };
-}
-
-if (closeModal && effectModal) {
-  closeModal.onclick = () => {
-    effectModal.style.display = "none";
-  };
-  
-  window.onclick = (event) => {
-    if (event.target == effectModal) {
-      effectModal.style.display = "none";
-    }
-  };
-}
-
-// Load available GIFs
-async function loadGifList() {
-  const gifList = document.getElementById("gif-list");
-  gifList.innerHTML = "Loading...";
-  
-  try {
-    const response = await fetch('/list_gifs');
-    const data = await response.json();
+document.addEventListener('DOMContentLoaded', () => {
     
-    if (data.status === 'ok' && data.gifs.length > 0) {
-      gifList.innerHTML = '';
-      data.gifs.forEach(gif => {
-        const gifButton = document.createElement('button');
-        gifButton.className = 'gif-button';
-        gifButton.textContent = gif.replace('.gif', '');
-        gifButton.onclick = () => sendGif(gif);
-        gifList.appendChild(gifButton);
-      });
-    } else {
-      gifList.innerHTML = 'No GIFs found';
+    // --- Page Navigation Handlers ---
+    const calibrationBtn = document.getElementById('calibration-btn');
+    if(calibrationBtn) {
+        calibrationBtn.addEventListener('click', () => {
+            window.location.href = '/calibration';
+        });
     }
-  } catch (error) {
-    gifList.innerHTML = 'Error loading GIFs: ' + error.message;
-  }
+
+    const editorBtn = document.getElementById('gif-editor-btn');
+    if(editorBtn) {
+        editorBtn.addEventListener('click', () => {
+            window.location.href = '/gif_editor';
+        });
+    }
+
+    // --- Effects Page Logic ---
+    // Check if we are on the effects page by looking for the list container
+    const gifListContainer = document.getElementById('gif-list');
+    if (gifListContainer) {
+        loadGifs();
+    }
+});
+
+// --- GIF Functions ---
+
+async function loadGifs() {
+    const list = document.getElementById('gif-list');
+    if (!list) return;
+
+    try {
+        const resp = await fetch('/list_gifs');
+        const data = await resp.json();
+        
+        if (data.status === 'ok') {
+            list.innerHTML = ''; // Clear loading text
+            data.gifs.forEach(gifName => {
+                const div = document.createElement('div');
+                div.className = 'gif-item';
+                div.innerText = gifName;
+                div.onclick = () => playGif(gifName);
+                list.appendChild(div);
+            });
+        } else {
+            list.innerText = "Error loading GIFs.";
+        }
+    } catch (e) {
+        console.error(e);
+        list.innerText = "Connection error.";
+    }
 }
 
-// Send GIF to ESP
-async function sendGif(gifName) {
-  const gifList = document.getElementById("gif-list");
-  const originalContent = gifList.innerHTML;
-  gifList.innerHTML = `Sending ${gifName}...`;
-  
-  try {
-    const response = await fetch('/send_gif', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ gif_name: gifName })
-    });
-    
-    const data = await response.json();
-    
-    if (data.status === 'ok') {
-      alert(`✅ GIF "${gifName}" loaded!\n${data.frames} frames, ${data.size_kb} KB`);
-      document.getElementById('playback-controls').style.display = 'block';
-    } else {
-      alert('❌ Error: ' + data.error);
+async function playGif(gifName) {
+    // Highlight selected
+    document.querySelectorAll('.gif-item').forEach(el => el.classList.remove('selected'));
+    event.target.classList.add('selected');
+
+    // Show controls
+    const controls = document.getElementById('playback-controls');
+    if(controls) controls.style.display = 'block';
+
+    try {
+        await fetch('/send_gif', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ gif_name: gifName })
+        });
+    } catch (e) {
+        alert("Failed to send GIF to tree");
     }
-  } catch (error) {
-    alert('❌ Error sending GIF: ' + error.message);
-  } finally {
-    gifList.innerHTML = originalContent;
-    loadGifList(); // Reload the list
-  }
 }
 
-// Control GIF playback
 async function controlGif(action) {
-  try {
-    const response = await fetch('/gif_control', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: action })
+    await fetch('/gif_control', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: action })
     });
-    
-    const data = await response.json();
-    console.log(`GIF ${action}:`, data);
-  } catch (error) {
-    console.error('Error controlling GIF:', error);
-  }
 }
 
-// Set GIF speed
 async function setGifSpeed() {
-  const speed = document.getElementById('gif-speed').value;
-  
-  try {
-    const response = await fetch('/gif_control', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        action: 'speed',
-        value: parseInt(speed)
-      })
+    const ms = document.getElementById('gif-speed').value;
+    await fetch('/gif_control', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'speed', value: parseInt(ms) })
     });
-    
-    const data = await response.json();
-    console.log('Speed set:', data);
-  } catch (error) {
-    console.error('Error setting speed:', error);
-  }
 }
 
+async function loadGifs() {
+    const list = document.getElementById('gif-list');
+    if (!list) return;
+
+    try {
+        const resp = await fetch('/list_gifs');
+        const data = await resp.json();
+        
+        if (data.status === 'ok') {
+            list.innerHTML = ''; // Clear loading text
+            
+            if (data.gifs.length === 0) {
+                list.innerText = "No GIFs found.";
+                return;
+            }
+
+            data.gifs.forEach(gifName => {
+                // 1. Create the Card Container
+                const card = document.createElement('div');
+                card.className = 'effect-card';
+                card.onclick = () => playGif(gifName);
+
+                // 2. Create the Image
+                const img = document.createElement('img');
+                img.src = `/get_gif_image/${gifName}`; // URL to the Python route
+                img.alt = gifName;
+                img.className = 'effect-thumb';
+                img.loading = "lazy"; // Performance optimization
+
+                // 3. Create the Label
+                const label = document.createElement('div');
+                // remove .gif extension for display
+                label.innerText = gifName.replace(/\.gif$/i, '');
+                label.className = 'effect-name';
+
+                // 4. Assemble
+                card.appendChild(img);
+                card.appendChild(label);
+                list.appendChild(card);
+            });
+        } else {
+            list.innerText = "Error loading GIFs.";
+        }
+    } catch (e) {
+        console.error(e);
+        list.innerText = "Connection error.";
+    }
+}
+
+async function playGif(gifName) {
+    // Highlight selected visually
+    // Note: We search for '.effect-card' now, not '.gif-item'
+    document.querySelectorAll('.effect-card').forEach(el => el.classList.remove('selected'));
+    
+    // Find the card that was clicked (it might be the image or label that triggered the event)
+    const card = event.target.closest('.effect-card');
+    if (card) card.classList.add('selected');
+
+    // Show controls
+    const controls = document.getElementById('playback-controls');
+    if(controls) controls.style.display = 'block';
+
+    try {
+        await fetch('/send_gif', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ gif_name: gifName })
+        });
+    } catch (e) {
+        alert("Failed to send GIF to tree");
+    }
+}

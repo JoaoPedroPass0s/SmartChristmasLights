@@ -1,0 +1,313 @@
+/* --- 1. Variables & Global Theme --- */
+:root {
+  --bg-dark: #0f172a;
+  --glass-bg: rgba(30, 41, 59, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --primary-accent: #38bdf8; /* Cyan/Blue Glow */
+  --primary-hover: #0ea5e9;
+  --danger: #ef4444;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --radius-lg: 16px;
+  --radius-sm: 8px;
+}
+
+body {
+  background-color: var(--bg-dark); /* Fallback */
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* --- 2. Layout & Grid --- */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0px;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Mobile Default */
+  gap: 24px;
+  align-items: start;
+}
+
+/* PC Specifics: Split columns */
+@media (min-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr; /* Equal width columns */
+  }
+
+  .sticky-panel {
+    position: sticky;
+    top: 20px;
+  }
+}
+
+/* --- 3. Glass Panels & Typography --- */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+h1 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; }
+
+h2 {
+  color: var(--primary-accent);
+  font-size: 1.1rem;
+  margin-top: 0;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- 4. Interactive Elements (Buttons) --- */
+button {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.back-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  padding: 8px 16px;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.primary-btn, #apply-effects-btn, #save-gif-btn {
+  background: var(--primary-accent);
+  color: #000; /* Contrast text for bright button */
+  padding: 12px 20px;
+  font-size: 1rem;
+}
+
+.primary-btn:hover, #apply-effects-btn:hover, #save-gif-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+}
+
+.full-width { width: 100%; }
+
+.control-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.control-row button {
+  flex: 1;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.control-row button:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* --- 5. Inputs & Forms --- */
+/* Custom File Input Styling */
+.custom-file-input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.custom-file-input:hover { border-color: var(--primary-accent); color: white; }
+
+/* Text Inputs */
+.text-input, input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: white;
+  font-size: 1rem;
+}
+
+.text-input:focus, input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary-accent);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+  color: var(--text-muted);
+}
+
+.input-group input[type="number"] { width: 80px; }
+
+/* Range Sliders */
+.slider-group { margin-bottom: 24px; }
+
+.slider-group label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.slider-group span { color: var(--primary-accent); }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: var(--text-main);
+  cursor: pointer;
+  margin-top: -7px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  border: 2px solid var(--primary-accent);
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* --- 6. Custom Checkbox (Toggle Switch) --- */
+.checkbox-row {
+  display: flex;
+  gap: 25px;
+  margin-bottom: 25px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+}
+
+.checkbox-container input {
+  appearance: none;
+  background-color: rgba(255,255,255,0.1);
+  margin: 0;
+  font: inherit;
+  color: currentColor;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  display: grid;
+  place-content: center;
+  transition: 0.2s;
+  position: relative;
+}
+
+.checkbox-container input::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: 0.2s;
+}
+
+.checkbox-container input:checked { background-color: var(--primary-accent); }
+.checkbox-container input:checked::before {
+  transform: translateX(18px);
+  background: #000;
+}
+
+/* --- 7. Cropper & Preview Areas --- */
+.crop-container {
+  background: #000;
+  height: 300px; /* Fixed height for consistency */
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin: 15px 0;
+  border: 1px dashed var(--glass-border);
+  position: relative;
+}
+
+#crop-image {
+  max-width: 100%;
+  display: block; /* Fixes unexpected whitespace */
+}
+
+.canvas-wrapper {
+  background-color: #000;
+  /* Checkerboard pattern for transparency indication */
+  background-image:
+    linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
+    linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
+    linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+#preview-canvas {
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+.save-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--glass-border);
+}
