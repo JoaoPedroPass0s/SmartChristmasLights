@@ -250,7 +250,7 @@ document.getElementById('apply-effects-btn').addEventListener('click', async () 
 document.getElementById('save-gif-btn').addEventListener('click', async () => {
     if (!window.currentGifName) return alert('No GIF to save.');
     try {
-        const resp = await fetch('/save_gif/' + encodeURIComponent(window.currentGifName), {
+        const resp = await fetch('/save_gif/' + encodeURIComponent(`${window.currentGifName.replace(/\.gif$/i, '')}_cropped.gif`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gif_name: document.getElementById('gif-name').value })
