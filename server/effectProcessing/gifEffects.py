@@ -4,7 +4,7 @@ import json
 import cv2
 import os
 
-def process_gif_effects(gif_path, resolution=300, use_interpolation=True, smooth_temporal=False, gamma=2.4, saturation_boost=1.2):
+def process_gif_effects(gif_path, resolution=300, use_gamma_correction=True, smooth_temporal=True, gamma=2.4, saturation_boost=1.2):
     """
     Process GIF frames for LED display with high-detail preservation.
     
@@ -88,7 +88,8 @@ def process_gif_effects(gif_path, resolution=300, use_interpolation=True, smooth
         # 2. Gamma Correction (Fixes "washed out" look)
         # LEDs are linear, eyes are logarithmic. We apply gamma to make shadows darker
         # and midtones richer.
-        if gamma != 1.0:
+
+        if use_gamma_correction and gamma != 1.0:
             # Normalize to 0-1, apply power, scale back
             led_pixels = led_pixels.astype(np.float32) / 255.0
             led_pixels = np.power(led_pixels, gamma)

@@ -33,12 +33,13 @@ class LEDEffectGenerator:
         self.leds = np.zeros((self.num_leds, 3), dtype=np.uint8)
 
     def get_effect_names():
-        """Returns a list of available effect names."""
         return [
+            "conical_spiral_effect",
             "waving_stripe",
             "down_to_up",
             "pulsating_glow",
             "color_waves",
+            "wrapping_spiral_effect",
             "ripple_effect",
             "color_pulses",
             "radial_pulse",
@@ -46,7 +47,17 @@ class LEDEffectGenerator:
             "coordinate_twinkling",
             "candy_cane_effect",
             "right_to_left",
-            "wave_ripple_effect"
+            "wave_ripple_effect",
+            "fireworks",
+            "falling_snow",
+            "plasma_cloud",
+            "radar_sweep",
+            "glitter_sparkles",
+            "green_glitter",
+            "bouncing_balls",
+            "concentric_rings",
+            "dual_rotation",
+            "gradient_wipe"
         ]
 
     # --- Helpers to mimic FastLED ---
@@ -76,6 +87,116 @@ class LEDEffectGenerator:
     # ==========================================
     #               THE EFFECTS
     # ==========================================
+
+    def conical_spiral_effect(self):
+        frames = []
+        num_frames = 400
+        
+        # --- Settings ---
+        spiral_loops = 4.0    # How many times it wraps around the tree
+        speed = 0.2           # Rotation speed
+        stripe_thickness = 40 # Thickness of the line in pixels/coords
+        color_speed = 5       # How fast the rainbow cycles
+        
+        # 1. Analyze the Tree Shape
+        min_y = np.min(self.y)
+        max_y = np.max(self.y)
+        tree_height = max_y - min_y
+        
+        min_x = np.min(self.x)
+        max_x = np.max(self.x)
+        tree_width = max_x - min_x
+        center_x = (min_x + max_x) / 2.0
+
+        # 2. Pre-calculate Normalized Height (0.0 at bottom, 1.0 at top)
+        # Note: In many LED systems, Y=0 is top. If your Y=0 is bottom, swap logic.
+        # Assuming Y increases downwards (standard image coords):
+        # Bottom of tree is Max Y. Top is Min Y.
+        # Let's generalize: We want 0.0 at "wide part" and 1.0 at "pointy part".
+        
+        # If your Top is Y=0:
+        norm_height = 1.0 - (self.y - min_y) / tree_height 
+        # Result: Top of tree = 0.0, Bottom = 1.0 (Wait, we want the inverse for radius)
+        
+        # Let's define "Taper Factor": 
+        # 1.0 = Full Width (Bottom), 0.0 = No Width (Top)
+        # We assume the tree is roughly centered and triangular.
+        # We simply use the normalized height to scale the radius.
+        
+        # Normalized Y from 0 (bottom) to 1 (top)
+        # We assume standard cartesian: Y is bigger at bottom? 
+        # Let's look at your previous code, usually Y=0 is top.
+        # If Y=0 is top (pointy), radius should be small.
+        # If Y=max is bottom (wide), radius should be big.
+        
+        taper_factor = (self.y - min_y) / tree_height 
+        # If Y=0 is top, taper_factor is 0. Radius becomes 0. Perfect.
+        # If Y=Height is bottom, taper_factor is 1. Radius is Max. Perfect.
+
+        # Max radius at the very bottom of the tree
+        max_radius = tree_width / 2.0
+
+        time = 0
+        hue = 0
+
+        for _ in range(num_frames):
+            self.fill_solid([0,0,0]) # Clear background
+            
+            # --- 3D Projection Math ---
+            
+            # 1. Calculate the Angle (Theta) for every LED based on height
+            # As we go up the tree, the angle increases (creating the spiral)
+            theta = (taper_factor * spiral_loops * 2 * np.pi) - time
+            
+            # 2. Calculate the "Ideal X" for the spiral at this height
+            # x = center + (radius * taper * sin(theta))
+            current_radius = max_radius * taper_factor
+            ideal_x = center_x + (current_radius * np.sin(theta))
+            
+            # 3. Calculate "Z-Depth" (Front or Back?)
+            # Cosine gives us the depth. +1 is front, -1 is back.
+            z_depth = np.cos(theta) 
+            
+            # --- Drawing Logic ---
+            
+            # Check distance from the ideal X line
+            dist = np.abs(self.x - ideal_x)
+            
+            # Mask: LED is inside the stripe width
+            # We scale thickness by taper too, so the line gets thinner at the top
+            current_thickness = stripe_thickness * (0.3 + 0.7 * taper_factor)
+            mask_hit = dist < current_thickness
+
+            # --- Masking for "Behind the Tree" ---
+            # If z_depth is negative, the spiral is on the back side.
+            # We can either hide it, or dim it. 
+            # Let's Keep only the Front (z > -0.2) to look like it's wrapping around.
+            mask_front = z_depth > -0.2
+            
+            final_mask = mask_hit & mask_front
+            
+            # --- Coloring ---
+            # Create a Rainbow
+            r, g, b = colorsys.hsv_to_rgb((hue % 255) / 255.0, 1.0, 1.0)
+            color = [int(r*255), int(g*255), int(b*255)]
+            
+            # Apply Color
+            self.leds[final_mask] = color
+            
+            # Optional: Add a dimmer "Back" spiral for better 3D effect
+            # (Uncomment this block if you want to see the back side dimly)
+            """
+            mask_back = mask_hit & (~mask_front)
+            dim_color = [int(c * 0.2) for c in color]
+            self.leds[mask_back] = dim_color
+            """
+
+            frames.append(self.record_frame())
+            
+            time += speed
+            hue += color_speed
+
+        return frames
 
     def waving_stripe(self):
         frames = []
@@ -158,6 +279,93 @@ class LEDEffectGenerator:
             
             hue += 5
             frames.append(self.record_frame())
+        return frames
+    
+    def wrapping_spiral_effect(self):
+        frames = []
+        num_frames = 400 # Longer animation loop
+        
+        # ================= PARAMETERS TO TWEAK =================
+        # Speed of vertical movement/rotation
+        # Positive = downwards wrapping, Negative = upwards wrapping
+        speed = 0.15         
+        
+        # How tightly coiled the spiral is. 
+        # Higher number = more wraps around the tree.
+        frequency = 8.0    
+        
+        # Thickness of the spiral stripe in coordinate units.
+        # If your coordinates are 0-600, try approx 20-40.
+        stripe_thickness = 30.0    
+
+        # Speed of the rainbow color shifting
+        hue_increment = 3   
+        # =======================================================
+
+
+        # 1. Calculate Tree Dimensions once (Vectorized)
+        # We need to know the shape of the tree to wrap around it correctly.
+        min_y = np.min(self.y)
+        max_y = np.max(self.y)
+        tree_height = max_y - min_y
+        
+        min_x = np.min(self.x)
+        max_x = np.max(self.x)
+        tree_center_x = (min_x + max_x) / 2.0
+        max_tree_width = max_x - min_x
+
+        # 2. Pre-calculate Tapering
+        # Normalize Y to 0.0-1.0 range for easier math.
+        # Assuming larger Y values are lower on the tree (standard image coordinates).
+        # 0.0 = Bottom of tree, 1.0 = Top of tree.
+        y_norm = (self.y - min_y) / tree_height
+
+        # Define a taper shape so the spiral gets narrower at the top.
+        # 1.0 at bottom, gradually shrinking to 0.2 scale at the top.
+        taper_factor = 1.0 - (y_norm * 0.8)
+        
+        # Calculate the maximum radius allowed at each LED's specific height
+        allowed_radii_at_height = (max_tree_width / 2.0) * taper_factor
+        
+        time = 0
+        hue = 0
+
+        for _ in range(num_frames):
+            # Background: Dim existing lights slightly for a trail effect, 
+            # or use fill_solid([0,0,0]) for a clean black background.
+            self.fade_to_black_by(80) 
+            
+            # --- The Helix Projection Math ---
+            
+            # 1. Calculate the sine wave based on height and time.
+            # This creates the left-to-right oscillation.
+            sine_wave_val = np.sin((y_norm * frequency) + time)
+            
+            # 2. Determine the target X position for the center of the stripe.
+            # CenterX + (How wide we can go at this height * sine value)
+            target_x_at_height = tree_center_x + (allowed_radii_at_height * sine_wave_val)
+
+            # --- The Mask ---
+            # Find LEDs whose real X coordinate is close to the ideal target X line.
+            # We calculate absolute distance on the X axis.
+            dist_from_stripe_center = np.abs(self.x - target_x_at_height)
+            
+            # Create boolean mask for LEDs inside the stripe thickness
+            mask = dist_from_stripe_center < (stripe_thickness / 2.0)
+            
+            # --- Color Logic ---
+            # Calculate current rainbow color
+            r, g, b = colorsys.hsv_to_rgb((hue % 255) / 255.0, 1.0, 1.0)
+            rainbow_color = [int(r*255), int(g*255), int(b*255)]
+
+            # Apply color to the masked area
+            self.leds[mask] = rainbow_color
+
+            # Record and advance state
+            frames.append(self.record_frame())
+            time += speed
+            hue += hue_increment
+            
         return frames
 
     def ripple_effect(self):
@@ -429,6 +637,291 @@ class LEDEffectGenerator:
             
             frames.append(self.record_frame())
             sim_time += frame_dt
+            
+        return frames
+
+    def fireworks(self):
+        frames = []
+        num_frames = 400
+        gravity = 0.5
+        particles = [] 
+        
+        for t in range(num_frames):
+            self.fade_to_black_by(30) # Trails
+            
+            # 1. Randomly launch (10% chance)
+            if random.random() < 0.1: 
+                cx = random.choice(self.x)
+                cy = np.min(self.y) + (np.max(self.y) - np.min(self.y)) * 0.3 
+                hue = random.random()
+                
+                # Spawn explosion particles
+                for _ in range(20):
+                    angle = random.random() * 2 * np.pi
+                    speed = random.uniform(2, 6)
+                    particles.append({
+                        'x': cx, 'y': cy,
+                        'vx': np.cos(angle) * speed,
+                        'vy': np.sin(angle) * speed,
+                        'hue': hue,
+                        'life': 1.0
+                    })
+            
+            # 2. Update Particles
+            active_particles = []
+            if particles:
+                for p in particles:
+                    p['x'] += p['vx']
+                    p['y'] += p['vy']
+                    p['vy'] += gravity
+                    p['life'] -= 0.04
+                    
+                    if p['life'] > 0:
+                        dist = np.sqrt((self.x - p['x'])**2 + (self.y - p['y'])**2)
+                        mask = dist < 15 
+                        
+                        r,g,b = colorsys.hsv_to_rgb(p['hue'], 1.0, p['life'])
+                        color = np.array([r*255, g*255, b*255])
+                        
+                        # Additive blending
+                        current = self.leds[mask].astype(int)
+                        blended = np.minimum(255, current + color).astype(np.uint8)
+                        self.leds[mask] = blended
+                        
+                        active_particles.append(p)
+            
+            particles = active_particles
+            frames.append(self.record_frame())
+        return frames
+
+    def falling_snow(self):
+        frames = []
+        num_frames = 400
+        num_flakes = 50
+        
+        min_y, max_y = np.min(self.y), np.max(self.y)
+        min_x, max_x = np.min(self.x), np.max(self.x)
+        
+        # Init flakes
+        flake_x = np.random.uniform(min_x, max_x, num_flakes)
+        flake_y = np.random.uniform(min_y, max_y, num_flakes)
+        flake_speed = np.random.uniform(2, 5, num_flakes)
+        
+        for _ in range(num_frames):
+            self.fill_solid([0, 0, 0])
+            
+            flake_y += flake_speed
+            
+            # Reset flakes at bottom
+            reset_mask = flake_y > max_y
+            flake_y[reset_mask] = min_y - 10
+            flake_x[reset_mask] = np.random.uniform(min_x, max_x, np.sum(reset_mask))
+            
+            for i in range(num_flakes):
+                dist = np.sqrt((self.x - flake_x[i])**2 + (self.y - flake_y[i])**2)
+                mask = dist < 10 
+                self.leds[mask] = [200, 200, 255]
+                
+            frames.append(self.record_frame())
+        return frames
+
+    def plasma_cloud(self):
+        frames = []
+        time = 0
+        scale = 0.02 
+        
+        for _ in range(300):
+            # Complex interference pattern
+            v1 = np.sin(self.x * scale + time)
+            v2 = np.sin(self.y * scale + time)
+            v3 = np.sin((self.x + self.y) * scale + time)
+            total_val = v1 + v2 + v3
+            
+            # Norm to 0-1
+            norm_val = (total_val + 3) / 6.0
+            
+            # Fast Vectorized Color Mapping
+            colors = np.zeros((self.num_leds, 3), dtype=np.uint8)
+            colors[:, 0] = (np.sin(norm_val * np.pi) * 127 + 128).astype(np.uint8)
+            colors[:, 1] = (np.sin(norm_val * np.pi + 2) * 127 + 128).astype(np.uint8)
+            colors[:, 2] = (np.sin(norm_val * np.pi + 4) * 127 + 128).astype(np.uint8)
+            
+            self.leds[:] = colors
+            frames.append(self.record_frame())
+            time += 0.1
+        return frames
+
+    def radar_sweep(self):
+        frames = []
+        center_x = (np.min(self.x) + np.max(self.x)) / 2
+        center_y = (np.min(self.y) + np.max(self.y)) / 2
+        
+        angles = np.arctan2(self.y - center_y, self.x - center_x)
+        angles = (angles + 2*np.pi) % (2*np.pi)
+        
+        sweep_angle = 0
+        speed = 0.13
+        
+        for _ in range(300):
+            self.fade_to_black_by(40) 
+            
+            diff = np.abs(angles - sweep_angle)
+            diff = np.minimum(diff, 2*np.pi - diff)
+            
+            mask = diff < 0.15
+            self.leds[mask] = [0, 255, 0] # Green
+            
+            frames.append(self.record_frame())
+            sweep_angle = (sweep_angle + speed) % (2*np.pi)
+            
+        return frames
+
+    def glitter_sparkles(self):
+        frames = []
+        bg_color = np.array([50, 0, 0]) # Dim Red
+        sparkle_color = np.array([255, 255, 200]) # Gold
+        
+        for _ in range(200):
+            # Fade towards background color
+            current = self.leds.astype(float)
+            self.leds = (current * 0.9 + bg_color * 0.1).astype(np.uint8)
+            
+            # Ignite random LEDs
+            lucky_indices = np.random.choice(self.num_leds, size=int(self.num_leds * 0.02), replace=False)
+            self.leds[lucky_indices] = sparkle_color
+            
+            frames.append(self.record_frame())
+        return frames
+
+    def green_glitter(self):
+        frames = []
+        meteor_size = 80 
+        offset = 0
+        
+        for _ in range(300):
+            self.fill_solid([0, 0, 0])
+            
+            # Pseudo-random column offset based on X
+            col_offset = (self.x * 123.45) % 800 
+            pos = (self.y + offset + col_offset) % 800
+            
+            # Head
+            mask_head = pos < 20 
+            self.leds[mask_head] = [200, 255, 200]
+            
+            # Trail
+            mask_trail = (pos >= 20) & (pos < meteor_size)
+            if np.any(mask_trail):
+                brightness = 1.0 - ((pos[mask_trail] - 20) / (meteor_size - 20))
+                brightness = np.clip(brightness, 0, 1)
+                
+                green_vals = (brightness * 255).astype(np.uint8)
+                self.leds[mask_trail, 1] = green_vals
+                self.leds[mask_trail, 0] = 0
+                self.leds[mask_trail, 2] = 0
+
+            frames.append(self.record_frame())
+            offset += 15
+        return frames
+
+    def bouncing_balls(self):
+        frames = []
+        num_balls = 3
+        max_y, min_y = np.max(self.y), np.min(self.y)
+        height = max_y - min_y
+        
+        ball_h = np.array([1.0, 0.8, 0.6]) 
+        ball_v = np.array([0.0, 0.0, 0.0])
+        gravity = -0.002
+        elasticity = 0.85
+        colors = [[255,0,0], [0,255,0], [0,0,255]]
+        
+        center_x = (np.min(self.x) + np.max(self.x)) / 2
+        
+        for _ in range(400):
+            self.fade_to_black_by(40)
+            
+            ball_v += gravity
+            ball_h += ball_v
+            
+            for i in range(num_balls):
+                if ball_h[i] < 0:
+                    ball_h[i] = 0
+                    ball_v[i] = -ball_v[i] * elasticity
+            
+            for i in range(num_balls):
+                real_y = max_y - (ball_h[i] * height)
+                dist = np.abs(self.y - real_y)
+                dist_x = np.abs(self.x - center_x)
+                
+                mask = (dist < 30) & (dist_x < 150)
+                self.leds[mask] = colors[i]
+                
+            frames.append(self.record_frame())
+        return frames
+
+    def concentric_rings(self):
+        frames = []
+        center_x = (np.min(self.x) + np.max(self.x)) / 2
+        center_y = (np.min(self.y) + np.max(self.y)) / 2
+        
+        dists = np.sqrt((self.x - center_x)**2 + (self.y - center_y)**2)
+        offset = 0
+        
+        for _ in range(300):
+            self.fill_solid([0,0,0])
+            val = np.sin((dists / 30.0) - offset)
+            mask = val > 0.8
+            self.leds[mask] = [0, 100, 255] # Cyan
+            
+            frames.append(self.record_frame())
+            offset += 0.2
+        return frames
+
+    def dual_rotation(self):
+        frames = []
+        center_x = (np.min(self.x) + np.max(self.x)) / 2
+        center_y = (np.min(self.y) + np.max(self.y)) / 2
+        
+        angles = np.arctan2(self.y - center_y, self.x - center_x)
+        rotation = 0
+        
+        for _ in range(300):
+            eff_angle = (angles + rotation) % (2*np.pi)
+            mask_a = eff_angle < np.pi
+            
+            self.leds[mask_a] = [255, 0, 0]
+            self.leds[~mask_a] = [0, 0, 255]
+            
+            # White border
+            mask_border = np.abs(eff_angle - np.pi) < 0.1
+            self.leds[mask_border] = [255, 255, 255]
+            
+            frames.append(self.record_frame())
+            rotation += 0.05
+        return frames
+
+    def gradient_wipe(self):
+        frames = []
+        projection = self.x + self.y
+        min_p, max_p = np.min(projection), np.max(projection)
+        offset = 0
+        
+        for _ in range(300):
+            self.fill_solid([0,0,0])
+            
+            pos = (projection - min_p + offset) % (max_p - min_p)
+            norm_pos = pos / (max_p - min_p)
+            
+            # Simple Rainbow Map
+            colors = np.zeros((self.num_leds, 3), dtype=np.uint8)
+            colors[:, 0] = (np.sin(norm_pos * 2 * np.pi) * 127 + 128).astype(np.uint8)
+            colors[:, 1] = (np.sin(norm_pos * 2 * np.pi + 2) * 127 + 128).astype(np.uint8)
+            colors[:, 2] = (np.sin(norm_pos * 2 * np.pi + 4) * 127 + 128).astype(np.uint8)
+            
+            self.leds[:] = colors
+            frames.append(self.record_frame())
+            offset += 10
             
         return frames
 
