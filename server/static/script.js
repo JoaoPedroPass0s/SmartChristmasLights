@@ -128,6 +128,11 @@ async function playEffect(effectName) {
     document.querySelectorAll('.effect-card').forEach(el => el.classList.remove('selected'));
     const card = event.target.closest('.effect-card');
     if (card) card.classList.add('selected');
+
+    // Show controls
+    const controls = document.getElementById('playback-controls');
+    if(controls) controls.style.display = 'block';
+    
     try {
         await fetch('/send_effect', {
             method: 'POST',
