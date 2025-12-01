@@ -3,7 +3,9 @@ from calibration.image_processing import analyze_video, detect_leds_in_frame
 import requests, json, os, time, struct,io
 from calibration import image_processing
 from effectProcessing import gifEffects
+from effectProcessing import testGifEffects
 from PIL import Image
+from effectProcessing.code_effects import LEDEffectGenerator
 
 ESP_URL = "http://192.168.1.200"  # ESP's IP
 
@@ -308,7 +310,7 @@ def save_gif(filename):
         return jsonify({"status": "ok", "message": "GIF saved"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-    
+
 @app.route("/list_gifs", methods=["GET"])
 def list_gifs():
     """List all available GIF files in the gifs directory"""
@@ -382,6 +384,118 @@ def send_gif():
     except Exception as e:
         app.logger.error(f"Error sending GIF: {str(e)}")
         return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route('/list_effects', methods=['GET'])
+def list_effects():
+    effect_names = LEDEffectGenerator.get_effect_names()
+    
+    return jsonify({
+        'status': 'ok',
+        'effects': effect_names
+    })
+
+@app.route("/send_effect", methods=["POST"]) 
+def send_effect():
+    data = request.json
+
+    if "effect_name" in data:
+        effect_name = data["effect_name"]
+    try:
+        app.logger.info(f"Processing Effect: {effect_name}")
+        
+        gen = LEDEffectGenerator("jsons/led_positions.json")
+
+        frames = getattr(gen, effect_name)()
+
+        num_frames = len(frames)
+        
+        app.logger.info(f"Processed {num_frames} frames")
+        
+        # Build payload: [2-byte frame count][RGB data]
+        payload = bytearray(struct.pack('<H', num_frames))
+        
+        for frame in frames:
+            for led in frame:
+                payload.extend(led)  # Append R, G, B bytes
+        
+        total_size = len(payload)
+        app.logger.info(f"Payload size: {total_size} bytes ({total_size / 1024:.2f} KB)")
+        
+        # Send to ESP
+        url = f"{ESP_URL}/gif"
+        app.logger.info(f"Sending GIF to {url}")
+        
+        resp = requests.post(url, data=payload, timeout=30)
+        app.logger.info(f"ESP response: {resp.status_code} - {resp.text}")
+        
+        return jsonify({
+            "status": "ok",
+            "effect": os.path.basename(effect_name),
+            "frames": num_frames,
+            "size_kb": round(total_size / 1024, 2),
+            "esp_response": resp.text
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error sending Effect: {str(e)}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+    
+@app.route('/get_effect_preview/<effect_name>')
+def get_effect_preview(effect_name):
+    """Generate or serve a preview GIF for the effect"""
+    from effectProcessing.code_effects import LEDEffectGenerator
+    import numpy as np
+    
+    # Check if preview already exists in cache
+    preview_dir = os.path.join(os.path.dirname(__file__), "static", "effect_previews")
+    os.makedirs(preview_dir, exist_ok=True)
+    
+    preview_path = os.path.join(preview_dir, f"{effect_name}.mp4")
+    
+    # If preview doesn't exist, generate it
+    if not os.path.exists(preview_path):
+        try:
+            app.logger.info(f"Generating preview for effect: {effect_name}")
+            gen = LEDEffectGenerator("jsons/led_positions.json")
+            
+            # Get the effect method
+            if hasattr(gen, effect_name):
+                frames = getattr(gen, effect_name)()
+                if frames:
+                    # Limit to first 90 frames for faster preview generation
+                    preview_frames = frames[:90] if len(frames) > 90 else frames
+                    
+                    # Generate video preview
+                    testGifEffects.frames_to_video(
+                        preview_frames, 
+                        preview_path, 
+                        fps=15, 
+                        canvas_size=(200, 300),
+                        dot_radius=3
+                    )
+                    app.logger.info(f"Generated preview at {preview_path}")
+                else:
+                    raise ValueError(f"Effect {effect_name} returned no frames")
+            else:
+                raise ValueError(f"Effect {effect_name} not found")
+        except Exception as e:
+            app.logger.error(f"Error generating preview for {effect_name}: {str(e)}")
+            # Return a placeholder on error
+            placeholder = os.path.join(os.path.dirname(__file__), "static", "images", "effect_placeholder.png")
+            if os.path.exists(placeholder):
+                return send_file(placeholder, mimetype='image/png')
+            
+            # Generate simple fallback image
+            from PIL import Image
+            from io import BytesIO
+            img = Image.new('RGB', (200, 200), color=(50, 50, 100))
+            img_io = BytesIO()
+            img.save(img_io, 'PNG')
+            img_io.seek(0)
+            return send_file(img_io, mimetype='image/png')
+    
+    # Serve the cached video preview
+    return send_file(preview_path, mimetype='video/mp4')
 
 @app.route("/gif_control", methods=["POST"])
 def gif_control():

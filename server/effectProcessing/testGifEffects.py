@@ -3,7 +3,7 @@ from PIL import Image, ImageSequence
 import numpy as np
 import cv2
 import json
-import gifEffects
+from . import gifEffects
 import requests
 
 ESP_IP = "192.168.1.200"  # ESP's IP
@@ -94,7 +94,7 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=None, dot_radius=4,
     """Render a list of per-LED RGB frames to a video file (MP4).
 
     frames: list/array of shape (num_frames, num_leds, 3) in RGB
-    output_path: destination path (e.g. ../gifs/output.mp4)
+    output_path: destination path (e.g. ../gifs/output.gif)
     fps: frames per second
     canvas_size: (width, height). If None, auto-calculates from LED positions
     dot_radius: LED dot radius in pixels
@@ -142,7 +142,7 @@ def frames_to_video(frames, output_path, fps=15, canvas_size=None, dot_radius=4,
     if out_dir and not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*'gifv')
     writer = cv2.VideoWriter(output_path, fourcc, float(fps), (width, height))
     if not writer.isOpened():
         raise RuntimeError(f"Failed to open video writer for {output_path}")
@@ -172,6 +172,6 @@ if __name__ == '__main__':
     #                  save_path="../gifs/"+ gif_name +"_frame0_preview.png", show=False)
 
     # Save to video (canvas size auto-calculated from LED positions)
-    output_video_path = "gifs/"+ gif_name +"_preview.mp4"
+    output_video_path = "gifs/"+ gif_name +"_preview.gif"
     frames_to_video(frames, output_video_path, fps=15, dot_radius=4)
     print(f"Saved preview video to {output_video_path}")
