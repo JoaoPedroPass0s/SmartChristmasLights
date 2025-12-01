@@ -6,12 +6,12 @@
 #include <LittleFS.h>
 
 #define LED_PIN    D4      // Pin connected to the Data input of the WS2811 strip
-#define NUM_LEDS   200     // Total number of LEDs in your strip
+#define NUM_LEDS   250     // Total number of LEDs in your strip
 #define LED_TYPE   WS2811  // Type of LED strip
 #define COLOR_ORDER RGB    // Color order
 #define MAX_BRIGHTNESS 60      // LED brightness
 #define NUM_CAL_STEPS 5      // Number of calibration steps
-#define NUM_FRAMES 5       // Number of frames in the calibration pattern
+#define NUM_FRAMES 6       // Number of frames in the calibration pattern
 #define FRAME_DELAY 300    // Delay between frames in milliseconds
 #define MAX_GIF_FRAMES 100  // Maximum number of frames for GIF animations
 

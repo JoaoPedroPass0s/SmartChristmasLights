@@ -57,7 +57,17 @@ class LEDEffectGenerator:
             "bouncing_balls",
             "concentric_rings",
             "dual_rotation",
-            "gradient_wipe"
+            "gradient_wipe",
+            "christmas_twinkle",
+            "red_green_march",
+            "snow_glitter",
+            "vintage_bulb_breathe",
+            "icicle_drops_loop",
+            "multicolor_smooth_twinkle",
+            "holly_jolly_fade_loop",
+            "gold_silver_shimmer_loop",
+            "rgb_tri_chase",
+            "gentle_pulse_twinkle"
         ]
 
     # --- Helpers to mimic FastLED ---
@@ -87,6 +97,361 @@ class LEDEffectGenerator:
     # ==========================================
     #               THE EFFECTS
     # ==========================================
+
+    def gentle_pulse_twinkle(self):
+        """
+        A sophisticated 'Breathing' Twinkle.
+        The entire tree slowly fades in to a sparkling crescendo,
+        then smoothly fades back out to darkness.
+        """
+        frames = []
+        num_frames = 400 # The total loop length
+        
+        # 1. Setup Colors (Classic Mix)
+        palette = np.array([
+            [255, 0, 0], [0, 255, 0], [0, 0, 255], 
+            [255, 220, 0], [200, 0, 200]
+        ])
+        pixel_colors = palette[np.random.randint(0, 5, self.num_leds)]
+        
+        # 2. Individual Twinkle Settings
+        phases = np.random.uniform(0, 2*np.pi, self.num_leds)
+        speeds = np.random.uniform(0.1, 0.3, self.num_leds)
+        
+        for t in range(num_frames):
+            
+            # --- THE GLOBAL "BREATH" CALCULATOR ---
+            
+            # A. Create a base wave that goes 0 -> 1 -> 0 two times in the loop
+            # (t / num_frames) * 2 * PI * 2 = 2 full cycles
+            theta = (t / num_frames) * 2 * np.pi * 2
+            
+            # B. Shift sine so it goes from 0.0 to 1.0 (starts at 0)
+            base_wave = (np.sin(theta - np.pi/2) + 1) / 2.0
+            
+            # C. THE MAGIC SAUCE: Power Curve
+            # By raising the wave to the power of 4, we squash the low values.
+            # This creates a long pause of darkness, followed by a smooth mountain.
+            # Change '4' to '2' for shorter pauses, or '8' for longer pauses.
+            global_energy = base_wave ** 4
+            
+            # --- THE INDIVIDUAL TWINKLE ---
+            individual_brightness = (np.sin(phases + (t * speeds)) + 1) / 2.0
+            
+            # --- COMBINE ---
+            # The individual lights sparkle, but their maximum limit is determined 
+            # by the Global Energy.
+            final_brightness = individual_brightness * global_energy
+            
+            # Apply color
+            current_leds = pixel_colors * final_brightness[:, np.newaxis]
+            self.leds[:] = current_leds.astype(np.uint8)
+            
+            frames.append(self.record_frame())
+            
+        return frames
+
+    def rgb_tri_chase(self):
+        """
+        Refined Request: 
+        - Pattern: LED 0=Red, 1=Green, 2=Blue...
+        - Animation: Light up only Red, then only Green, then only Blue.
+        """
+        frames = []
+        speed_delay = 10 # Hold each color for 10 frames (controls speed)
+        
+        # Define the 3 Colors
+        colors = np.array([
+            [255, 0, 0],   # Red
+            [0, 255, 0],   # Green
+            [0, 0, 255]    # Blue
+        ])
+        
+        # Pre-calculate the color assignment for every LED
+        # indices 0,3,6... get Red (Index 0 in colors array)
+        # indices 1,4,7... get Green (Index 1 in colors array)
+        # indices 2,5,8... get Blue (Index 2 in colors array)
+        led_indices = np.arange(self.num_leds)
+        assignments = led_indices % 3
+        
+        # Total loop for a seamless cycle
+        # We need to cycle through 0, 1, 2. 
+        # Let's do 6 full cycles of the pattern.
+        total_steps = 3 * 6 
+        
+        for step in range(total_steps):
+            # Which group is active? 0, 1, or 2
+            active_group = step % 3
+            
+            # Create a frame where only the active group is lit
+            self.fill_solid([0, 0, 0])
+            
+            # Boolean mask: Which LEDs belong to the active group?
+            mask = (assignments == active_group)
+            
+            # Light them up
+            # We assume the color is determined by the assignment
+            # So if active_group is 0, we use colors[0] (Red)
+            self.leds[mask] = colors[active_group]
+            
+            # Record this frame multiple times to control speed
+            # (Instead of one fast frame, we duplicate it)
+            for _ in range(speed_delay):
+                frames.append(self.record_frame())
+                
+        return frames
+
+    def holly_jolly_fade_loop(self):
+        """
+        Seamlessly loops Red -> Green -> Red using a perfect Sine Wave.
+        """
+        frames = []
+        num_frames = 200 # Fixed length for perfect loop
+        
+        for t in range(num_frames):
+            # 1. Calculate Loop Progress (0.0 to 2*PI)
+            # This ensures the end matches the start perfectly
+            theta = (t / num_frames) * 2 * np.pi
+            
+            # Map sine (-1 to 1) to (0.0 to 1.0)
+            mix = (np.sin(theta) + 1) / 2.0 
+            
+            # Interpolate Red to Green
+            red_val = int(255 * mix)
+            green_val = int(255 * (1.0 - mix))
+            
+            self.fill_solid([red_val, green_val, 0])
+            frames.append(self.record_frame())
+            
+        return frames
+
+    def gold_silver_shimmer_loop(self):
+        """
+        Seamless metallic shimmer.
+        """
+        frames = []
+        num_frames = 200
+        
+        gold = np.array([255, 200, 50])
+        silver = np.array([200, 200, 255])
+        
+        indices = np.arange(self.num_leds)
+        
+        for t in range(num_frames):
+            # Calculate Loop Progress
+            progress = (t / num_frames) * 2 * np.pi
+            
+            # Wave moves along the strip
+            # (indices / 10.0) creates the spatial wave
+            # progress creates the movement
+            wave_val = np.sin((indices / 10.0) + progress)
+            
+            # Map -1..1 to 0..1
+            wave = (wave_val + 1) / 2.0
+            
+            # Interpolate
+            c1 = gold * wave[:, np.newaxis]
+            c2 = silver * (1.0 - wave)[:, np.newaxis]
+            
+            self.leds[:] = (c1 + c2).astype(np.uint8)
+            frames.append(self.record_frame())
+            
+        return frames
+
+    def icicle_drops_loop(self):
+        """
+        Drops icicles, but stops spawning them near the end
+        so the strip is clear when the loop restarts.
+        """
+        frames = []
+        num_frames = 300
+        drops = []
+        
+        # We stop adding new drops at 80% of the animation
+        # to let the existing ones fall off the screen before the loop resets.
+        stop_spawning_frame = int(num_frames * 0.8)
+        
+        for t in range(num_frames):
+            self.fade_to_black_by(40)
+            
+            # Only spawn if we are in the safe zone
+            if t < stop_spawning_frame:
+                if random.random() < 0.05:
+                    drops.append(0.0)
+                
+            active_drops = []
+            for pos in drops:
+                idx = int(pos)
+                if 0 <= idx < self.num_leds:
+                    self.leds[idx] = [255, 255, 255]
+                    new_pos = pos + 1.5
+                    if new_pos < self.num_leds:
+                        active_drops.append(new_pos)
+            
+            drops = active_drops
+            frames.append(self.record_frame())
+            
+        return frames
+
+    def multicolor_smooth_twinkle(self):
+        """
+        Replaces the harsh 'blinking' with a smooth, organic fade-in/fade-out
+        for every individual bulb.
+        """
+        frames = []
+        num_frames = 300
+        
+        # 1. Define Palette
+        palette = np.array([
+            [255, 0, 0],    # Red
+            [0, 255, 0],    # Green
+            [0, 0, 255],    # Blue
+            [255, 220, 0],  # Gold
+            [200, 0, 200]   # Purple
+        ])
+        
+        # 2. Assign permanent colors to LEDs
+        pixel_colors = palette[np.random.randint(0, 5, self.num_leds)]
+        
+        # 3. Assign Random Offsets (Phases)
+        # This ensures every LED starts at a different brightness level
+        # and fades at a slightly different time in the cycle.
+        phases = np.random.uniform(0, 2*np.pi, self.num_leds)
+        
+        # Speed of the fade pulse
+        speed = 0.1 
+        
+        for t in range(num_frames):
+            # Calculate Brightness based on Time and Phase
+            # sin() gives -1 to 1.
+            # We shift it: (sin + 1) / 2  -> gives 0.0 to 1.0 (Smooth Fade)
+            brightness = (np.sin(phases + (t * speed)) + 1) / 2.0
+            
+            # Optional: Sharpen the curve so they stay dark a bit longer
+            # Squaring the brightness makes the lows lower and peaks sharper
+            # brightness = brightness ** 2 
+            
+            # Apply brightness to the fixed colors
+            # (N,3) * (N,1) broadcasting
+            current_leds = pixel_colors * brightness[:, np.newaxis]
+            
+            self.leds[:] = current_leds.astype(np.uint8)
+            frames.append(self.record_frame())
+            
+        return frames
+
+    def christmas_twinkle(self):
+        frames = []
+        # Warm White color
+        warm_white = np.array([255, 230, 150]) 
+        
+        for _ in range(300):
+            # 1. Fade ALL LEDs by a small amount (creates the tail/fade out)
+            # Multiplying by 0.93 makes them dim slowly
+            self.leds = (self.leds * 0.93).astype(np.uint8)
+            
+            # 2. Pick random LEDs to light up
+            # 5% chance per frame for each LED to ignite? Too heavy.
+            # Let's pick a fixed number of random LEDs per frame.
+            num_sparkles = int(self.num_leds * 0.05) # 5% of strip
+            indices = np.random.choice(self.num_leds, num_sparkles, replace=False)
+            
+            # Set them to full brightness
+            self.leds[indices] = warm_white
+            
+            frames.append(self.record_frame())
+        return frames
+    
+    def red_green_march(self):
+        frames = []
+        block_size = 10 # How many LEDs per color block
+        speed = 1       # How fast it moves
+        offset = 0
+        
+        red = [255, 0, 0]
+        green = [0, 255, 0]
+        
+        # Create an index array [0, 1, 2, ... N]
+        indices = np.arange(self.num_leds)
+        
+        for _ in range(200):
+            # Math: ((i + offset) // block_size) % 2
+            # This creates a 0, 1, 0, 1 pattern for blocks
+            
+            pattern = ((indices + offset) // block_size) % 2
+            
+            # Vectorized assignment
+            # Where pattern is 0, set Red
+            self.leds[pattern == 0] = red
+            # Where pattern is 1, set Green
+            self.leds[pattern == 1] = green
+            
+            frames.append(self.record_frame())
+            offset += speed
+            
+        return frames
+    
+    def snow_glitter(self):
+        frames = []
+        bg_color = np.array([0, 0, 50]) # Deep dim blue
+        white = np.array([255, 255, 255])
+        
+        for _ in range(300):
+            # 1. Reset to background
+            # We want flashes to disappear instantly, or fade? 
+            # Let's fade strictly towards blue
+            
+            # Linear interpolation towards bg_color
+            current = self.leds.astype(float)
+            target = np.tile(bg_color, (self.num_leds, 1))
+            
+            # Fade current pixels 20% closer to the background color
+            self.leds = (current * 0.8 + target * 0.2).astype(np.uint8)
+            
+            # 2. Random white flashes
+            if random.random() < 0.5: # 50% chance per frame to spawn a group
+                num = random.randint(1, 5)
+                idx = np.random.choice(self.num_leds, num)
+                self.leds[idx] = white
+                
+            frames.append(self.record_frame())
+        return frames
+    
+    def vintage_bulb_breathe(self):
+        frames = []
+        
+        # 1. Assign a permanent color to every LED randomly
+        # Palette: Red, Green, Blue, Gold
+        palette = np.array([
+            [255, 0, 0],   # Red
+            [0, 255, 0],   # Green
+            [0, 0, 255],   # Blue
+            [255, 200, 0]  # Gold
+        ])
+        
+        # Assign random color index (0-3) to each LED
+        color_assignments = np.random.randint(0, 4, self.num_leds)
+        base_colors = palette[color_assignments] # Array of (N, 3)
+        
+        # 2. Assign a random "phase" to each LED so they breathe independently
+        phases = np.random.uniform(0, 2*np.pi, self.num_leds)
+        speed = 0.1
+        
+        for t in range(300):
+            # Calculate brightness sine wave (0.2 to 1.0)
+            # sin returns -1 to 1. We map it.
+            brightness = (np.sin(phases + (t * speed)) + 1) / 2 # 0.0 to 1.0
+            brightness = (brightness * 0.8) + 0.2 # Minimum brightness 0.2
+            
+            # Apply brightness to base colors
+            # base_colors is (N,3), brightness is (N,). We need to broadcast.
+            final_colors = base_colors * brightness[:, np.newaxis]
+            
+            self.leds[:] = final_colors.astype(np.uint8)
+            
+            frames.append(self.record_frame())
+            
+        return frames
 
     def conical_spiral_effect(self):
         frames = []

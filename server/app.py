@@ -17,8 +17,8 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")  # Default to "uploads" if not s
 import random
 
 elements = ['R','G','B']
-led_count = 200
-k = 5 # sequence length
+led_count = 250
+k = 6 # sequence length
 n_sequences = 5
 used = set()
 led_color_mappings = []

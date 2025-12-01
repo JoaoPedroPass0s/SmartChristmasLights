@@ -197,7 +197,7 @@ def analyze_video(video_path, debug=False, color_ranges=default_ranges):
             # handle frame
             next_target_ms += target_interval_s * 1000.0
 
-        if step_id >= 25:
+        if step_id >= 30:
             break
 
         frame_id += 1
@@ -295,8 +295,8 @@ def match_leds(mappings, grouped, debug = False, save_dir="led_debug_frames", ba
     matched = []
     for (i, mapping) in enumerate(mappings):
         for (pos, colors) in grouped:
-            detected_codes = [''.join(colors[j:j+5]) for j in range(0, len(colors), 5)]
-            # if theres more than one equal 5-length segment
+            detected_codes = [''.join(colors[j:j+6]) for j in range(0, len(colors), 6)]
+            # if theres more than one equal 6-length segment
             num_found = 0
             for detected_code in detected_codes:
                 if mapping == detected_code:
